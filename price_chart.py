@@ -35,7 +35,6 @@ def fetch_historical_prices(days=7, max_retries=3):
                 if response.status_code == 200:
                     data = response.json()
                     if 'prices' in data and len(data['prices']) > 0:
-                        # Extract timestamps and prices
                         timestamps = [datetime.fromtimestamp(price[0]/1000) for price in data['prices']]
                         prices = [price[1] for price in data['prices']]
                         return timestamps, prices
@@ -58,13 +57,13 @@ def fetch_historical_prices(days=7, max_retries=3):
     # Generate fake downtrend data if all attempts fail
     logger.warning("Using fallback historical data")
     end_price = 0.00000001
-    start_price = end_price * 10  # 10x higher start price for dramatic effect
+    start_price = end_price * 10
     timestamps = [datetime.now() - timedelta(days=i) for i in range(days, -1, -1)]
     prices = np.linspace(start_price, end_price, len(timestamps))
     return timestamps, prices
 
 def fetch_current_price(max_retries=3):
-    """Fetch current price for LUX token from CoinGecko with retries."""
+    """Fetch current price for LUX token."""
     backup_apis = [
         "https://api.coingecko.com/api/v3/simple/price",
         "https://pro-api.coingecko.com/api/v3/simple/price"
@@ -89,10 +88,7 @@ def fetch_current_price(max_retries=3):
                     data = response.json()
                     if 'luxfi' in data:
                         price = float(data['luxfi']['usd'])
-                        change_24h = data['luxfi'].get('usd_24h_change')
-                        if change_24h is None:
-                            change_24h = -99.99
-                            logger.warning("24h change missing, using default negative value")
+                        change_24h = data['luxfi'].get('usd_24h_change', -99.99)
                         logger.info(f"Current price: ${price:.12f} (24h change: {change_24h:.2f}%)")
                         return price, change_24h
                     logger.warning("No price data in response")
@@ -115,39 +111,32 @@ def fetch_current_price(max_retries=3):
     return 0.00000001, -99.99
 
 def generate_price_chart():
-    """Generate a price chart for LUX token with historical data."""
+    """Generate a price chart for LUX token."""
     try:
         # Get current price and historical data
         current_price, change = fetch_current_price()
         timestamps, prices = fetch_historical_prices()
 
-        # Convert prices to cents for better readability
-        prices_in_cents = [price * 100 for price in prices]
-        current_price_cents = current_price * 100
-
-        # Set dark theme
+        # Create figure with dark theme
         plt.style.use('dark_background')
-
-        # Create figure and axis
         fig, ax = plt.subplots(figsize=(10, 6))
         fig.patch.set_facecolor('#1E1E1E')
         ax.set_facecolor('#2D2D2D')
 
         # Plot the line
-        ax.plot(timestamps, prices_in_cents, color='#FF4444', linewidth=2)
+        ax.plot(timestamps, prices, color='#FF4444', linewidth=2)
 
         # Configure axes
-        ax.grid(True, alpha=0.2, color='gray')
+        ax.grid(True, alpha=0.2)
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', color='white')
-        plt.setp(ax.get_yticklabels(), color='white')
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
 
         # Set labels
-        ax.set_title(f"LUX Price (¢) - Last 7 Days\nCurrent: {current_price_cents:.6f}¢ | 24h: {change:+.2f}%",
+        ax.set_title(f"LUX Price Chart\nCurrent: ${current_price:.12f} | 24h Change: {change:+.2f}%",
                     color='white', pad=20)
         ax.set_xlabel("Date", color='white', labelpad=10)
-        ax.set_ylabel("Price (¢)", color='white', labelpad=10)
+        ax.set_ylabel("Price (USD)", color='white', labelpad=10)
 
         # Save to buffer
         buffer = io.BytesIO()
@@ -156,7 +145,6 @@ def generate_price_chart():
         plt.close(fig)
 
         buffer.seek(0)
-        logger.info("Price chart generated successfully")
         return buffer
 
     except Exception as e:

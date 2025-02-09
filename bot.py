@@ -2,14 +2,13 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+import logging
+import asyncio
+from aiohttp import web
 from price_chart import generate_price_chart
 from roast_generator import generate_roast
-import asyncio
-import logging
-from aiohttp import web
-import threading
 
-# Set up logging with more details
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -18,8 +17,8 @@ logger = logging.getLogger('discord_bot')
 
 # Load environment variables
 load_dotenv()
-token = os.getenv('DISCORD_TOKEN')
-if not token:
+TOKEN = os.getenv('DISCORD_TOKEN')
+if not TOKEN:
     logger.error("No Discord token found in environment variables!")
     exit(1)
 
@@ -27,7 +26,7 @@ if not token:
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guild_messages = True
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=commands.DefaultHelpCommand())
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 async def start_http_server():
     """Start a simple HTTP server for health checks."""
@@ -56,8 +55,8 @@ async def on_ready():
         logger.info('\nInvite link:')
         logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
 
-        # Start HTTP server for health checks after bot is ready
-        await start_http_server()
+        # Start HTTP server for health checks
+        bot.loop.create_task(start_http_server())
     except Exception as e:
         logger.error(f"Error in on_ready: {str(e)}")
 
@@ -79,27 +78,19 @@ async def lux_price(ctx):
 
     try:
         async with ctx.typing():
-            # First send a message to confirm the command is received
+            # Send initial message
             await ctx.send("📊 Generating price chart...")
 
-            logger.info("Generating price chart...")
+            # Generate and send price chart
             chart_buffer = generate_price_chart()
-
             if chart_buffer:
-                try:
-                    await ctx.send(
-                        "💰 LUX Price Chart:",
-                        file=discord.File(fp=chart_buffer, filename='lux_price.png')
-                    )
-                    logger.info("Price chart sent successfully")
-                except Exception as e:
-                    logger.error(f"Failed to send price chart: {str(e)}")
-                    await ctx.send("❌ Failed to send price chart. Please try again!")
-                finally:
-                    chart_buffer.close()
+                await ctx.send(
+                    "💰 LUX Price Chart:",
+                    file=discord.File(fp=chart_buffer, filename='lux_price.png')
+                )
+                chart_buffer.close()
             else:
-                logger.error("Failed to generate price chart")
-                await ctx.send("❌ Failed to fetch price data. Market might be down or API rate limit reached. Try again in a few minutes!")
+                await ctx.send("❌ Failed to generate price chart. Please try again later!")
     except Exception as e:
         logger.error(f"Error in lux command: {str(e)}")
         await ctx.send("❌ Something went wrong. Please try again later!")
@@ -111,20 +102,17 @@ async def roast_command(ctx):
 
     try:
         async with ctx.typing():
-            logger.info("Generating roast...")
             roast = generate_roast()
-            logger.info(f"Generated roast: {roast}")
             await ctx.send(roast)
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Failed to generate roast. Please try again!")
 
-# Run the bot
 if __name__ == "__main__":
     try:
         logger.info("Starting bot...")
-        bot.run(token, log_handler=None)  # Disable discord.py's default logging
+        bot.run(TOKEN, log_handler=None)
     except discord.LoginFailure:
-        logger.error("Error: Failed to login. Invalid token!")
+        logger.error("Failed to login. Invalid token!")
     except Exception as e:
-        logger.error(f"Error: Failed to start bot: {str(e)}")
+        logger.error(f"Failed to start bot: {str(e)}")
