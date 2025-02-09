@@ -48,17 +48,11 @@ async def on_ready():
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
-    logger.info('Available commands: !help, !roast, !meme, !crash')
-
-    # Ensure only one keep_alive task runs
-    for task in asyncio.all_tasks(bot.loop):
-        if task.get_name() == 'keep_alive':
-            return
+    logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
     # Start keep-alive loop if not already running
-    keep_alive_task = bot.loop.create_task(keep_alive(), name='keep_alive')
+    bot.loop.create_task(keep_alive())
     logger.info("Started keep-alive task")
-
 
 async def keep_alive():
     """Keep-alive loop to maintain bot connection"""
@@ -67,47 +61,28 @@ async def keep_alive():
         try:
             if not bot.is_closed():
                 logger.info("Keep-alive heartbeat: Bot is active")
-                # Update presence more frequently to maintain connection
                 await bot.change_presence(
                     activity=discord.Game(name="!help | Roasting LUX"),
                     status=discord.Status.online
                 )
-                await asyncio.sleep(15)  # Reduced from 30 to 15 seconds
+                await asyncio.sleep(15)  # Check every 15 seconds
             else:
                 logger.warning("Keep-alive detected closed connection")
-                # Force reconnection if connection is closed
-                if not bot.is_closed():
-                    try:
-                        await bot.connect(reconnect=True)
-                    except Exception as e:
-                        logger.error(f"Reconnection attempt failed: {str(e)}")
-                await asyncio.sleep(5)  # Short delay before retry
+                await asyncio.sleep(5)  # Brief delay before retry
         except Exception as e:
             logger.error(f"Error in keep-alive loop: {str(e)}")
-            await asyncio.sleep(5)  # Wait before retry
+            await asyncio.sleep(5)
 
 @bot.event
 async def on_resumed():
     """Log when the bot resumes a session after disconnect"""
     logger.info("Bot resumed connection")
-    # Force status update on resume
     await update_bot_status()
-    # Ensure keep-alive task is running
-    for task in asyncio.all_tasks(bot.loop):
-        if task.get_name() == 'keep_alive':
-            break
-    else:
-        bot.loop.create_task(keep_alive(), name='keep_alive')
 
 @bot.event
 async def on_disconnect():
     """Log disconnection and attempt immediate reconnect"""
     logger.warning("Bot disconnected. Attempting to reconnect...")
-    try:
-        if not bot.is_closed():
-            await bot.connect(reconnect=True)
-    except Exception as e:
-        logger.error(f"Reconnection attempt failed: {str(e)}")
     await asyncio.sleep(1)  # Brief delay before next attempt
 
 @bot.event
@@ -117,29 +92,25 @@ async def on_error(event, *args, **kwargs):
     logger.exception('Traceback:')
 
 @bot.event
-async def on_command(ctx):
-    """Log when commands are used"""
-    logger.info(f'Command "{ctx.command.name}" used by {ctx.author} in {ctx.guild}')
-    # Ensure bot is online when processing commands
-    await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting LUX"),
-        status=discord.Status.online
-    )
-
-@bot.event
 async def on_message(message):
-    """Log all message events for debugging command handling"""
+    """Handle incoming messages with improved error handling"""
     if message.author == bot.user:
         return
 
-    logger.info(f"Message received: {message.content} from {message.author} in {message.guild}")
+    # Only process messages from guilds (servers), not DMs
+    if not message.guild:
+        return
 
-    # Check if message starts with command prefix
+    # Process commands with error handling
     if message.content.startswith(bot.command_prefix):
-        logger.info(f"Command detected: {message.content}")
-
-    await bot.process_commands(message)
-
+        logger.info(f"Processing command: {message.content} from {message.author}")
+        try:
+            ctx = await bot.get_context(message)
+            if ctx.valid:
+                await bot.invoke(ctx)
+        except Exception as e:
+            logger.error(f"Error processing command: {str(e)}")
+            await message.channel.send("❌ Error processing command. Please try again.")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -159,6 +130,26 @@ async def update_bot_status():
         status=discord.Status.online
     )
 
+# Add enhanced logging to ping command for better visibility
+@bot.command(name='ping')
+@commands.cooldown(1, 2, commands.BucketType.user)  # Rate limit: 1 use per 2 seconds per user
+async def ping(ctx):
+    """Check bot status and latency"""
+    logger.info(f'Executing ping command for {ctx.author}')
+    try:
+        # Calculate round-trip latency
+        latency = round(bot.latency * 1000)  # Convert to milliseconds
+
+        # Send response with latency and status
+        status_msg = f"🏓 Pong! Bot is active and healthy! (`{latency}ms`)\n"
+        status_msg += "✅ All systems operational"
+
+        await ctx.send(status_msg)
+        logger.info(f"Ping response sent with latency: {latency}ms")
+    except Exception as e:
+        logger.error(f"Error in ping command: {str(e)}")
+        await ctx.send("❌ Error checking status!")
+
 @bot.command(name='roast')
 @commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
 async def roast(ctx):
@@ -167,13 +158,13 @@ async def roast(ctx):
     try:
         await update_bot_status()
         logger.info("Sending initial response...")
-        await ctx.send("🔥 Generating savage NWA roast...")
+        message = await ctx.send("🔥 Generating savage NWA roast...")
 
         logger.info("Generating roast text...")
         roast_text = await generate_roast()
 
         logger.info(f"Sending roast: {roast_text}")
-        await ctx.send(roast_text)
+        await message.edit(content=roast_text)
         logger.info("Successfully sent roast")
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
@@ -202,14 +193,12 @@ async def meme(ctx, timeframe: str = "1hr"):
         meme_path = await generate_meme(timeframe)
         logger.info(f"Generated meme path: {meme_path}")
 
-        if meme_path and os.path.exists(meme_path) and meme_path.endswith('.png'):
-            file_size = os.path.getsize(meme_path)
-            logger.info(f"Sending meme file: {meme_path} (size: {file_size} bytes)")
-
+        if meme_path and os.path.exists(meme_path):
             try:
                 with open(meme_path, 'rb') as f:
                     await ctx.send(file=discord.File(f))
                 logger.info("Successfully sent meme file")
+                await message.delete()
             except Exception as e:
                 logger.error(f"Error sending meme file: {str(e)}")
                 await message.edit(content="Failed to send meme! Error occurred while sending file.")
@@ -236,16 +225,16 @@ async def crash(ctx):
     """Get current crash stats from price data"""
     logger.info(f'Executing crash command for {ctx.author}')
     try:
-        await update_bot_status()  # Set online immediately
+        await update_bot_status()
         message = await ctx.send("💥 Fetching latest LUX crash data...")
 
         logger.info("Attempting to fetch price history")
-        timestamps, prices = await get_lux_price_history()  # Now correctly unpacking two values
+        timestamps, prices = await get_lux_price_history()
 
         if timestamps and prices:
             current_price = prices[-1]
+            crash_percent = ((0.015 - current_price) / 0.015) * 100
             price_str = format_price_label(current_price)
-            crash_percent = ((0.015 - current_price) / 0.015) * 100  # Calculate crash percentage
 
             logger.info(f"Successfully fetched price data - Current: {price_str}, Down: {crash_percent:.1f}%")
 
@@ -269,15 +258,21 @@ async def crash(ctx):
 async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
-    await update_bot_status()  # Set online immediately
+    await update_bot_status()
     help_text = """
 🔥 **$LUXSUX Bot Commands** 🔥
+• `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
 • `!meme [timeframe]` - Generate a price chart meme
   - Timeframes: 5m, 15m, 1hr
 • `!crash` - See how much LUX crashed
     """
     await ctx.send(help_text)
+
+def format_price_label(price):
+    """Format price in cents"""
+    price_in_cents = price * 100
+    return f"{price_in_cents:.2f}¢"
 
 if __name__ == "__main__":
     restart_delay = 5
@@ -317,8 +312,3 @@ if __name__ == "__main__":
             restart_delay = min(restart_delay * 1.5, 30)
             last_restart = current_time
             continue
-
-def format_price_label(price):
-    """Formats the price for display,  assuming this function exists elsewhere"""
-    price_in_cents = price * 100
-    return f"{price_in_cents:.2f}¢"

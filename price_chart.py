@@ -56,7 +56,7 @@ async def create_price_chart(timeframe="1hr"):
         # Chart dimensions
         width = 1280
         height = 720
-        padding = 70  # Increased padding for better label spacing
+        padding = 80  # Increased padding for better label spacing
 
         # Create image with dark theme
         img = Image.new('RGB', (width, height), '#1E2124')
@@ -73,7 +73,7 @@ async def create_price_chart(timeframe="1hr"):
 
         # Load font with increased size for better readability
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)  # Increased font size
             logger.info("Loaded custom font successfully")
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
@@ -82,7 +82,7 @@ async def create_price_chart(timeframe="1hr"):
         # Draw grid and labels
         grid_color = '#2F3136'
         label_color = '#FFFFFF'
-        line_color = '#FF4444'  # Red line for price dumps
+        line_color = '#FF3333'  # Brighter red for better visibility
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
@@ -94,7 +94,7 @@ async def create_price_chart(timeframe="1hr"):
 
             # Price label
             price_str = format_price_label(price)
-            draw.text((10, y - 12), price_str, fill=label_color, font=font)
+            draw.text((10, y - 16), price_str, fill=label_color, font=font)  # Adjusted y-offset
 
         # Draw time labels and vertical grid lines
         num_labels = 6
@@ -107,7 +107,7 @@ async def create_price_chart(timeframe="1hr"):
 
             # Time label
             time_str = format_time_label(timestamp)
-            draw.text((x - 20, height - padding + 10), time_str, fill=label_color, font=font)
+            draw.text((x - 25, height - padding + 10), time_str, fill=label_color, font=font)  # Adjusted x-offset
 
         # Draw price line with increased thickness
         points = []
@@ -117,7 +117,9 @@ async def create_price_chart(timeframe="1hr"):
             points.append((x, y))
 
         if len(points) > 1:
-            draw.line(points, fill=line_color, width=3)  # Increased line width
+            # Draw thicker background line for glow effect
+            draw.line(points, fill='#FF6666', width=5)  # Wider background
+            draw.line(points, fill=line_color, width=3)  # Main line
 
         # Save chart with high quality
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"
