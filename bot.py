@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import logging
 from datetime import datetime
 from roast_generator import generate_roast
+from meme_generator import generate_meme
 
 # Set up logging
 logging.basicConfig(
@@ -75,6 +76,24 @@ async def roast_command(ctx):
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Failed to generate roast. Please try again!")
+
+@bot.command(name='meme', help='Generate a meme with current LUX price')
+async def meme_command(ctx):
+    """Generate and send a meme about LUX."""
+    try:
+        meme_result = generate_meme()
+        if meme_result and meme_result.endswith('.png'):
+            # Send image meme
+            with open(meme_result, 'rb') as f:
+                await ctx.send(file=discord.File(f))
+            # Clean up temp file
+            os.remove(meme_result)
+        else:
+            # Send text-only meme
+            await ctx.send(meme_result)
+    except Exception as e:
+        logger.error(f"Error in meme command: {str(e)}")
+        await ctx.send("❌ Failed to generate meme. Please try again!")
 
 if __name__ == "__main__":
     try:
