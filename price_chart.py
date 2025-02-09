@@ -16,6 +16,11 @@ async def get_lux_price_history(timeframe="1hr"):
     try:
         logger.info(f"Fetching LUX price data for timeframe {timeframe}")
 
+        # Set consistent seeds for reproducibility - change every 5 minutes
+        seed = int(datetime.now().timestamp()) // 300
+        np.random.seed(seed)
+        logger.info(f"Using seed {seed} for random generation")
+
         # Configure timeframes with accurate periods and price ranges
         timeframe_config = {
             "5m": {
@@ -42,54 +47,72 @@ async def get_lux_price_history(timeframe="1hr"):
         }
 
         config = timeframe_config.get(timeframe, timeframe_config["1hr"])
-        logger.info(f"Using configuration for {timeframe} timeframe")
+        logger.info(f"Using configuration for {timeframe} timeframe: {config}")
 
-        # Generate timestamps and prices
-        end_time = datetime.now(eastern)  # Use Eastern time
-        # Round end time to the nearest natural interval (e.g., 12:00, 12:15)
+        # Generate timestamps with proper rounding to intervals
+        end_time = datetime.now(eastern)
         interval_seconds = config["interval"]
-        rounded_timestamp = (int(end_time.timestamp()) // interval_seconds) * interval_seconds
-        end_time = datetime.fromtimestamp(rounded_timestamp, eastern)  # Keep in Eastern time
+        interval_minutes = interval_seconds // 60
+        current_minutes = end_time.minute
+        rounded_minutes = ((current_minutes + interval_minutes - 1) // interval_minutes) * interval_minutes
+        if rounded_minutes >= 60:
+            end_time = end_time.replace(hour=end_time.hour + 1, minute=0, second=0, microsecond=0)
+        else:
+            end_time = end_time.replace(minute=rounded_minutes, second=0, microsecond=0)
+        logger.info(f"End time (Eastern): {end_time}, rounded_minutes: {rounded_minutes}")
 
         timestamps = []
         prices = []
         candles = []
 
-        # Calculate start time based on periods and interval
+        # Calculate start time and ensure it's properly rounded
         total_duration = config["periods"] * config["interval"]
         start_time = end_time - timedelta(seconds=total_duration)
+        start_time = start_time.replace(second=0, microsecond=0)
 
-        # Initialize price variables
+        # Round start time to proper interval
+        start_minutes = (start_time.minute // interval_minutes) * interval_minutes
+        start_time = start_time.replace(minute=start_minutes)
+        logger.info(f"Start time (Eastern): {start_time}, start_minutes: {start_minutes}")
+
+        # Initialize price variables with logging
         current_price = config["start_price"]
         trend = np.random.choice([-1, 1])
         trend_strength = np.random.uniform(0.3, 0.7)
         volatility_base = config["volatility"]
         momentum = 0
 
+        logger.info(f"Initial conditions: trend={trend}, trend_strength={trend_strength:.3f}, volatility={volatility_base:.6f}")
+
         for i in range(config["periods"]):
-            # Calculate exact timestamp for this interval
             current_time = start_time + timedelta(seconds=i * config["interval"])
             timestamp = int(current_time.timestamp() * 1000)
 
+            # Log candle generation progress
+            if i % 10 == 0:  # Log every 10th candle
+                logger.info(f"Generating candle {i}/{config['periods']}: time={current_time.strftime('%m/%d %H:%M')}, price={current_price:.6f}")
+
             # Randomly switch trend with diminishing probability
             if np.random.random() < 0.15 * (1 - i/config["periods"]):
+                old_trend = trend
                 trend = -trend
                 trend_strength = np.random.uniform(0.3, 0.7)
-                volatility_base *= np.random.uniform(1.0, 1.5)  # Increase volatility on trend change
-                momentum = 0  # Reset momentum on trend change
+                volatility_base *= np.random.uniform(1.0, 1.5)
+                momentum = 0
+                logger.info(f"Trend switch at candle {i}: {old_trend} -> {trend}, new strength={trend_strength:.3f}")
 
-            # Generate price movement
-            # Combine trend, momentum, and mean reversion
+            # Generate price movement with improved realism
             trend_effect = trend * trend_strength * volatility_base
-            random_walk = np.random.normal(0, volatility_base)
-            target_effect = 0.1 * (config["current_price"] - current_price) / current_price
+            random_walk = np.random.normal(0, volatility_base * 0.5)
+            target_effect = 0.15 * (config["current_price"] - current_price) / current_price
 
-            # Apply combined price change
-            price_change = trend_effect + random_walk + target_effect + momentum
+            # Time-based volatility scaling
+            hour = current_time.hour
+            volatility_scale = 1.2 if 9 <= hour <= 16 else 0.8
+
+            price_change = (trend_effect + random_walk + target_effect + momentum) * volatility_scale
             current_price *= (1 + price_change)
-
-            # Update momentum
-            momentum = 0.3 * price_change * trend_strength
+            momentum = 0.7 * momentum + 0.3 * price_change * trend_strength
 
             # Ensure price stays within realistic bounds
             current_price = max(min(current_price, config["start_price"] * 1.2), 
@@ -98,22 +121,19 @@ async def get_lux_price_history(timeframe="1hr"):
             timestamps.append(timestamp)
             prices.append(current_price)
 
-            # Generate more realistic candle data
+            # Generate candle data with more realistic ranges
             volatility_factor = np.random.uniform(0.5, 2.0) * volatility_base
-            price_range = current_price * volatility_factor
+            range_factor = 1 + abs(momentum)
 
-            # Create more dramatic candles based on trend and momentum
             if trend > 0:
-                high = current_price * (1 + volatility_factor * (1 + abs(momentum)))
+                high = current_price * (1 + volatility_factor * range_factor)
                 low = current_price * (1 - volatility_factor * 0.7)
             else:
                 high = current_price * (1 + volatility_factor * 0.7)
-                low = current_price * (1 - volatility_factor * (1 + abs(momentum)))
+                low = current_price * (1 - volatility_factor * range_factor)
 
-            if i > 0:
-                open_price = prices[-2]  # Previous close becomes open
-            else:
-                open_price = current_price
+            # Ensure open price connects with previous close
+            open_price = prices[-2] if i > 0 else current_price
 
             candle = {
                 'timestamp': timestamp,
@@ -124,8 +144,14 @@ async def get_lux_price_history(timeframe="1hr"):
             }
             candles.append(candle)
 
+            # Log significant price movements
+            if abs(price_change) > 0.02:  # Log large price changes
+                logger.info(f"Large price movement at {current_time}: {price_change:.2%}")
+
         logger.info(f"Generated {len(candles)} candles from {start_time} to {end_time}")
+        logger.info(f"Final price: {current_price:.6f}")
         return timestamps, prices, candles
+
     except Exception as e:
         logger.error(f"Error in price history generation: {str(e)}")
         logger.exception("Full traceback:")
@@ -193,6 +219,7 @@ async def create_price_chart(timeframe="1hr"):
                     # Convert timestamp to Eastern time
                     utc_dt = datetime.fromtimestamp(candles[idx]['timestamp'] / 1000, pytz.UTC)
                     eastern_dt = utc_dt.astimezone(eastern)
+
                     # Format time with date for all timeframes
                     time_str = eastern_dt.strftime("%m/%d\n%H:%M")
                     text_width = len(time_str) * 5
@@ -239,9 +266,12 @@ async def create_price_chart(timeframe="1hr"):
                 logger.error(f"Error drawing candle {i}: {str(e)}")
                 continue
 
-        # Add title
+        # Add title with centering
         title = f"LUX/USD {timeframe} Chart"
-        draw.text((padding, 20), title, fill=label_color, font=font)
+        title_bbox = draw.textbbox((0, 0), title, font=font)
+        title_width = title_bbox[2] - title_bbox[0]
+        title_x = (width - title_width) // 2
+        draw.text((title_x, 20), title, fill=label_color, font=font)
 
         # Save chart
         try:

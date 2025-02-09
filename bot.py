@@ -112,6 +112,21 @@ async def on_command(ctx):
     )
 
 @bot.event
+async def on_message(message):
+    """Log all message events for debugging command handling"""
+    if message.author == bot.user:
+        return
+
+    logger.info(f"Message received: {message.content} from {message.author} in {message.guild}")
+
+    # Check if message starts with command prefix
+    if message.content.startswith(bot.command_prefix):
+        logger.info(f"Command detected: {message.content}")
+
+    await bot.process_commands(message)
+
+
+@bot.event
 async def on_command_error(ctx, error):
     """Handle command errors gracefully"""
     if isinstance(error, commands.CommandOnCooldown):
@@ -135,13 +150,19 @@ async def roast(ctx):
     """Generate a savage roast"""
     logger.info(f'Executing roast command for {ctx.author}')
     try:
-        await update_bot_status()  # Set online immediately
+        await update_bot_status()
+        logger.info("Sending initial response...")
         await ctx.send("🔥 Generating savage NWA roast...")
+
+        logger.info("Generating roast text...")
         roast_text = await generate_roast()
+
+        logger.info(f"Sending roast: {roast_text}")
         await ctx.send(roast_text)
         logger.info("Successfully sent roast")
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
+        logger.exception("Full traceback:")
         await ctx.send("Failed to roast! But LUX is still going to zero! 💀")
 
 @bot.command(name='meme')
@@ -150,32 +171,41 @@ async def meme(ctx, timeframe: str = "1hr"):
     """Generate price chart meme with specified timeframe"""
     logger.info(f'Executing meme command for {ctx.author} with timeframe {timeframe}')
     try:
-        await update_bot_status()  # Set online immediately
+        await update_bot_status()
 
         # Validate timeframe
         valid_timeframes = {"5m", "15m", "1hr"}
         if timeframe not in valid_timeframes:
+            logger.warning(f"Invalid timeframe requested: {timeframe}")
             await ctx.send("❌ Invalid timeframe! Use 5m, 15m, or 1hr")
             return
 
+        logger.info(f"Starting meme generation with timeframe {timeframe}")
         await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
+
+        logger.info("Calling generate_meme function...")
         meme_path = await generate_meme(timeframe)
+        logger.info(f"Generated meme path: {meme_path}")
 
         if meme_path and os.path.exists(meme_path) and meme_path.endswith('.png'):
-            # Log file details before sending
             file_size = os.path.getsize(meme_path)
             logger.info(f"Sending meme file: {meme_path} (size: {file_size} bytes)")
 
-            # Send the generated chart
-            with open(meme_path, 'rb') as f:
-                await ctx.send(file=discord.File(f))
+            try:
+                with open(meme_path, 'rb') as f:
+                    await ctx.send(file=discord.File(f))
+                logger.info("Successfully sent meme file")
+            except Exception as e:
+                logger.error(f"Error sending meme file: {str(e)}")
+                await ctx.send("Failed to send meme! Error occurred while sending file.")
+                return
+
             # Clean up the file
             try:
                 os.remove(meme_path)
                 logger.info(f"Successfully cleaned up meme file: {meme_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean up meme file: {str(e)}")
-            logger.info("Successfully sent price chart meme")
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
