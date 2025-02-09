@@ -240,7 +240,7 @@ async def crash(ctx):
         message = await ctx.send("💥 Fetching latest LUX crash data...")
 
         logger.info("Attempting to fetch price history")
-        timestamps, prices = await get_lux_price_history()  # Update to match new return signature
+        timestamps, prices = await get_lux_price_history()  # Now correctly unpacking two values
 
         if timestamps and prices:
             current_price = prices[-1]
@@ -287,7 +287,9 @@ if __name__ == "__main__":
 
     while retry_count < max_retries:
         try:
-            logger.info("Starting bot...")
+            logger.info("Starting bot with enhanced logging...")
+            logger.info(f"Discord Token length: {len(TOKEN) if TOKEN else 0}")
+            logger.info("Initializing bot connection...")
             # Enhanced connection settings
             bot.run(
                 TOKEN,
@@ -295,6 +297,10 @@ if __name__ == "__main__":
                 log_handler=None,  # Prevent duplicate logging
                 log_formatter=None
             )
+        except discord.LoginFailure as e:
+            logger.error(f"Failed to login: {str(e)}")
+            logger.error("Please check if the Discord token is valid")
+            break  # Exit on authentication failure
         except Exception as e:
             retry_count += 1
             current_time = datetime.now()
