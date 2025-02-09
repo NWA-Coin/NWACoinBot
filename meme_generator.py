@@ -17,6 +17,7 @@ logger = logging.getLogger('discord_bot')
 async def get_crash_stats():
     """Get crash stats for roast."""
     try:
+        logger.info("Starting crash stats calculation")
         candles = await get_lux_price_history()
         if candles:
             entry_price = 0.015  # NWA entry price
@@ -25,18 +26,22 @@ async def get_crash_stats():
             price_in_cents = current_price * 100
             logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
             return crash_percent, price_in_cents
+        logger.warning("No candles data available for crash stats")
         return None, None
     except Exception as e:
         logger.error(f"Error getting crash stats: {str(e)}")
+        logger.exception("Full traceback:")
         return None, None
 
-def generate_meme():
+async def generate_meme():
     """Generate a price chart meme with savage roast overlay."""
     try:
         logger.info("Starting price chart meme generation")
 
         # Generate candlestick chart
-        chart_path = create_price_chart()
+        logger.info("Calling create_price_chart")
+        chart_path = await create_price_chart()
+        logger.info(f"Received chart path: {chart_path}")
 
         if not chart_path:
             logger.error("Failed to generate chart")
@@ -44,6 +49,7 @@ def generate_meme():
 
         # Verify chart was created and has content
         if not os.path.exists(chart_path) or os.path.getsize(chart_path) == 0:
+            logger.error(f"Chart file verification failed: exists={os.path.exists(chart_path)}, size={os.path.getsize(chart_path) if os.path.exists(chart_path) else 0}")
             raise Exception("Chart creation failed or file is empty")
 
         # Load chart and add text overlay
@@ -61,8 +67,9 @@ def generate_meme():
                 font = ImageFont.load_default()
 
             # Get crash stats for roast
-            loop = asyncio.get_event_loop()
-            crash_percent, price_in_cents = loop.run_until_complete(get_crash_stats())
+            logger.info("Getting crash stats for roast")
+            crash_percent, price_in_cents = await get_crash_stats()
+            logger.info(f"Received crash stats: {crash_percent}%, {price_in_cents}¢")
 
             if crash_percent is not None and price_in_cents is not None:
                 if crash_percent >= 90:
@@ -82,7 +89,7 @@ def generate_meme():
             outline_width = 2
             text_pos = (20, 20)
 
-            logger.info("Adding text overlay with outline")
+            logger.info(f"Adding text overlay: {roast}")
             # Draw outline
             for dx in range(-outline_width, outline_width+1):
                 for dy in range(-outline_width, outline_width+1):
@@ -95,6 +102,7 @@ def generate_meme():
 
             # Save final meme
             final_path = f"price_meme_{int(datetime.now().timestamp())}.png"
+            logger.info(f"Saving final meme to: {final_path}")
             img.save(final_path, quality=95)
             logger.info(f"Successfully saved final meme: {final_path}")
 
@@ -109,6 +117,7 @@ def generate_meme():
 
         except Exception as e:
             logger.error(f"Error processing image: {str(e)}")
+            logger.exception("Full traceback:")
             raise Exception(f"Image processing failed: {str(e)}")
 
     except Exception as e:

@@ -99,7 +99,7 @@ async def meme(ctx):
     logger.info(f'Executing meme command for {ctx.author}')
     try:
         await ctx.send("🔥 Generating LUX price chart... 📉")
-        meme_path = generate_meme()
+        meme_path = await generate_meme()
 
         if meme_path and os.path.exists(meme_path) and meme_path.endswith('.png'):
             # Log file details before sending

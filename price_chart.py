@@ -120,14 +120,13 @@ async def generate_mock_candles():
         logger.exception("Full traceback:")
         return []
 
-def create_price_chart():
+async def create_price_chart():
     """Create a candlestick chart using PIL."""
     try:
         logger.info("Starting candlestick chart creation")
 
         # Get candlestick data asynchronously
-        loop = asyncio.get_event_loop()
-        candles = loop.run_until_complete(get_lux_price_history())
+        candles = await get_lux_price_history()
 
         if not candles:
             logger.error("No candlestick data available")
@@ -189,8 +188,8 @@ def create_price_chart():
             body_bottom = max(open_y, close_y)
             body_height = max(1, body_bottom - body_top)  # Ensure minimum height of 1 pixel
 
-            draw.rectangle([(x, body_top), (x + candle_width, body_bottom)], 
-                         fill=color, outline=color)
+            # Use tuple format for rectangle coordinates
+            draw.rectangle((x, body_top, x + candle_width, body_bottom), fill=color, outline=color)
 
         # Add title and crash percentage
         title = "LUX 30m Candlestick Chart (7 Days)"
