@@ -3,9 +3,13 @@ import logging
 from datetime import datetime, timedelta
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+import pytz
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
+
+# Define Eastern timezone
+eastern = pytz.timezone('US/Eastern')
 
 async def get_lux_price_history(timeframe="1hr"):
     """Get LUX price history with specified timeframe."""
@@ -41,11 +45,11 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.info(f"Using configuration for {timeframe} timeframe")
 
         # Generate timestamps and prices
-        end_time = datetime.now()
+        end_time = datetime.now(eastern)  # Use Eastern time
         # Round end time to the nearest natural interval (e.g., 12:00, 12:15)
         interval_seconds = config["interval"]
         rounded_timestamp = (int(end_time.timestamp()) // interval_seconds) * interval_seconds
-        end_time = datetime.fromtimestamp(rounded_timestamp)
+        end_time = datetime.fromtimestamp(rounded_timestamp, eastern)  # Keep in Eastern time
 
         timestamps = []
         prices = []
@@ -122,7 +126,6 @@ async def get_lux_price_history(timeframe="1hr"):
 
         logger.info(f"Generated {len(candles)} candles from {start_time} to {end_time}")
         return timestamps, prices, candles
-
     except Exception as e:
         logger.error(f"Error in price history generation: {str(e)}")
         logger.exception("Full traceback:")
@@ -187,9 +190,11 @@ async def create_price_chart(timeframe="1hr"):
             if i < len(candles):
                 idx = int((i * (len(candles) - 1)) / num_vert_lines)
                 if idx < len(candles):
-                    dt = datetime.fromtimestamp(candles[idx]['timestamp'] / 1000)
+                    # Convert timestamp to Eastern time
+                    utc_dt = datetime.fromtimestamp(candles[idx]['timestamp'] / 1000, pytz.UTC)
+                    eastern_dt = utc_dt.astimezone(eastern)
                     # Format time with date for all timeframes
-                    time_str = dt.strftime("%m/%d\n%H:%M")
+                    time_str = eastern_dt.strftime("%m/%d\n%H:%M")
                     text_width = len(time_str) * 5
                     draw.text((x - text_width/2, height-padding+10), 
                              time_str, fill=label_color, font=small_font)
