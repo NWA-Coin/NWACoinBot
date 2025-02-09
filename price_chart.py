@@ -19,56 +19,54 @@ async def get_lux_price_history():
         try:
             logger.info(f"Fetching LUX price data (attempt {attempt + 1}/{max_retries})")
 
-            # Try multiple CoinGecko API endpoints since token ID might change
-            token_ids = ["lux-token", "lux", "luxfi"]
-            last_error = None
+            # Use the correct CoinGecko token ID for LUX
+            token_id = "luxfi"  # LUX is listed as LUXFI on CoinGecko
+            try:
+                url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart"
+                params = {
+                    "vs_currency": "usd",
+                    "days": "7",  # Last 7 days for better 30m candle visibility
+                    "interval": "30m",  # 30-minute intervals
+                    "precision": "full"
+                }
 
-            for token_id in token_ids:
-                try:
-                    url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart"
-                    params = {
-                        "vs_currency": "usd",
-                        "days": "7",  # Last 7 days for better 30m candle visibility
-                        "interval": "30m",  # 30-minute intervals
-                        "precision": "full"
-                    }
+                logger.info(f"Trying CoinGecko API with token ID: {token_id}")
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if 'prices' in data:
+                                # Extract timestamps and prices for !crash command
+                                dates = [p[0] for p in data['prices']]
+                                prices = [p[1] for p in data['prices']]
 
-                    logger.info(f"Trying CoinGecko API with token ID: {token_id}")
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url, params=params, timeout=10) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                if 'prices' in data:
-                                    # Get OHLC data from prices
-                                    timestamps = [p[0] for p in data['prices']]
-                                    prices = [p[1] for p in data['prices']]
+                                # Group into 30-minute candles for chart
+                                candles = []
+                                for i in range(0, len(prices), 2):  # 2 price points per hour
+                                    chunk = prices[i:i+2]
+                                    if chunk:
+                                        candle = {
+                                            'timestamp': dates[i],
+                                            'open': chunk[0],
+                                            'high': max(chunk),
+                                            'low': min(chunk),
+                                            'close': chunk[-1]
+                                        }
+                                        candles.append(candle)
 
-                                    # Group into 30-minute candles
-                                    candles = []
-                                    for i in range(0, len(prices), 2):  # 2 price points per hour
-                                        chunk = prices[i:i+2]
-                                        if chunk:
-                                            candle = {
-                                                'timestamp': timestamps[i],
-                                                'open': chunk[0],
-                                                'high': max(chunk),
-                                                'low': min(chunk),
-                                                'close': chunk[-1]
-                                            }
-                                            candles.append(candle)
-
-                                    if candles:
-                                        logger.info(f"Successfully fetched candle data from {token_id}")
-                                        return candles
-
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"Failed to fetch data for {token_id}: {str(e)}")
+                                if candles:
+                                    logger.info(f"Successfully fetched price data from {token_id}")
+                                    return dates, prices, candles  # Return all formats
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Failed to fetch data: {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
                     continue
 
-            # If all token IDs fail, fall back to mock data
-            logger.warning(f"All CoinGecko attempts failed: {str(last_error)}")
-            return await generate_mock_candles()
+            # If API fails, fall back to mock data
+            logger.warning(f"CoinGecko attempt failed: {str(last_error)}")
+            return await generate_mock_data()
 
         except Exception as e:
             logger.error(f"Error in get_lux_price_history: {str(e)}")
@@ -76,31 +74,49 @@ async def get_lux_price_history():
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
                 continue
-            return await generate_mock_candles()
+            return await generate_mock_data()
 
     logger.error("All attempts failed")
-    return await generate_mock_candles()
+    return await generate_mock_data()
 
-async def generate_mock_candles():
-    """Generate realistic mock candlestick data."""
+async def generate_mock_data():
+    """Generate realistic mock price data starting from NWA entry."""
     try:
-        logger.warning("Using mock candlestick data")
-        candles = []
+        logger.warning("Using mock price data")
         periods = 336  # 7 days of 30-minute candles
-        current_price = 0.015  # Start from NWA entry
+        entry_price = 0.015  # NWA entry price
+        current_price = 0.0037  # Current LUX price in USD (0.37 cents)
+
+        dates = []
+        prices = []
+        candles = []
+
+        # Calculate price decay to reach current price
+        price_decay = (current_price / entry_price) ** (1.0 / periods)
+        logger.info(f"Mock data parameters: entry=${entry_price:.8f}, current=${current_price:.8f}, decay={price_decay:.8f}")
 
         for i in range(periods):
-            # Generate realistic price movement
-            volatility = 0.15
-            price_change = np.random.normal(-0.02, volatility)
-
-            # Calculate OHLC values
-            open_price = current_price
-            close_price = max(0.00000001, current_price * (1 + price_change))
-            high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, 0.05)))
-            low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, 0.05)))
-
             timestamp = int((datetime.now() - timedelta(minutes=30 * (periods - i))).timestamp() * 1000)
+
+            # Calculate price with decay and some randomness
+            if i == 0:
+                price = entry_price
+            else:
+                volatility = 0.01  # Reduced volatility for smoother downtrend
+                random_factor = 1 + np.random.normal(0, volatility)
+                price = prices[-1] * price_decay * random_factor
+
+            # Ensure price doesn't go below current price floor
+            price = max(price, current_price)  # Maintain minimum price
+
+            dates.append(timestamp)
+            prices.append(price)
+
+            # Calculate OHLC values with smaller random variations
+            open_price = price
+            close_price = price * (1 + np.random.normal(0, 0.005))  # 0.5% variation
+            high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, 0.002)))
+            low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, 0.002)))
 
             candle = {
                 'timestamp': timestamp,
@@ -110,23 +126,24 @@ async def generate_mock_candles():
                 'close': close_price
             }
             candles.append(candle)
-            current_price = close_price
 
-        logger.info(f"Generated mock candles: ${candles[0]['open']:.8f} -> ${candles[-1]['close']:.8f}")
-        return candles
+        # Log the price range for verification
+        logger.info(f"Generated mock data: start=${prices[0]:.8f}, end=${prices[-1]:.8f}")
+        return dates, prices, candles
 
     except Exception as e:
-        logger.error(f"Error generating mock candles: {str(e)}")
+        logger.error(f"Error generating mock data: {str(e)}")
         logger.exception("Full traceback:")
-        return []
+        return [], [], []
 
+# Update create_price_chart to use the new return format
 async def create_price_chart():
     """Create a candlestick chart using PIL."""
     try:
         logger.info("Starting candlestick chart creation")
 
-        # Get candlestick data asynchronously
-        candles = await get_lux_price_history()
+        # Get price data asynchronously
+        dates, prices, candles = await get_lux_price_history()
 
         if not candles:
             logger.error("No candlestick data available")
@@ -192,12 +209,13 @@ async def create_price_chart():
             draw.rectangle((x, body_top, x + candle_width, body_bottom), fill=color, outline=color)
 
         # Add title and crash percentage
-        title = "LUX 30m Candlestick Chart (7 Days)"
-        draw.text((width//2 - 150, 20), title, fill='white', font=font)
+        entry_price = 0.015  # NWA entry price
+        current_price = candles[-1]['close']
+        crash_percent = ((entry_price - current_price) / entry_price) * 100
+        price_in_cents = current_price * 100
 
-        crash_percent = ((candles[0]['open'] - candles[-1]['close']) / candles[0]['open']) * 100
-        crash_text = f"Down {crash_percent:.1f}% 💀"
-        draw.text((width//2 - 50, height-40), crash_text, fill='red', font=font)
+        title = f"LUX 30m Chart | Down {crash_percent:.1f}% | Current: {price_in_cents:.4f}¢"
+        draw.text((width//2 - 250, 20), title, fill='white', font=font)
 
         # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"

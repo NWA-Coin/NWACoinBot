@@ -18,15 +18,15 @@ async def get_crash_stats():
     """Get crash stats for roast."""
     try:
         logger.info("Starting crash stats calculation")
-        candles = await get_lux_price_history()
-        if candles:
+        dates, prices = await get_lux_price_history()
+        if dates and prices:
             entry_price = 0.015  # NWA entry price
-            current_price = candles[-1]['close']
+            current_price = prices[-1]
             crash_percent = ((entry_price - current_price) / entry_price) * 100
             price_in_cents = current_price * 100
             logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
             return crash_percent, price_in_cents
-        logger.warning("No candles data available for crash stats")
+        logger.warning("No price data available for crash stats")
         return None, None
     except Exception as e:
         logger.error(f"Error getting crash stats: {str(e)}")

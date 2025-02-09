@@ -132,7 +132,7 @@ async def crash(ctx):
     logger.info(f'Executing crash command for {ctx.author}')
     try:
         await ctx.send("💥 Fetching latest LUX crash data...")
-        dates, prices = await get_lux_price_history()
+        dates, prices, _ = await get_lux_price_history()  # Ignore candles
         if dates and prices:
             entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
