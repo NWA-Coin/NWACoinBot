@@ -7,7 +7,8 @@ import sys
 from datetime import datetime, timedelta
 import asyncio
 from roast_generator import generate_roast
-from meme_generator import generate_meme, get_lux_price
+from meme_generator import generate_meme
+from price_chart import get_lux_price_history
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -67,20 +68,35 @@ class PersistentBot(commands.Bot):
         """Attempt to reconnect the bot"""
         if self.reconnect_attempts >= self.max_reconnect_attempts:
             logger.error("Max reconnection attempts reached, waiting 30 minutes before resetting counter")
-            await asyncio.sleep(1800)  # Wait 30 minutes
-            self.reconnect_attempts = 0
+            try:
+                await asyncio.sleep(1800)  # Wait 30 minutes
+                self.reconnect_attempts = 0
+                logger.info("Reset reconnection attempts counter")
+            except Exception as e:
+                logger.error(f"Error during reconnection wait: {str(e)}")
             return
 
         try:
             self.reconnect_attempts += 1
             logger.info(f"Attempting to reconnect (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})")
-            await self.close()
+
+            # Close existing connection if any
+            try:
+                await self.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing existing connection: {str(close_error)}")
+
+            # Attempt to start new connection
             await self.start(TOKEN)
             self.last_heartbeat = datetime.now()
             logger.info("Reconnection successful")
+            self.reconnect_attempts = 0  # Reset counter on successful reconnection
         except Exception as e:
             logger.error(f"Failed to reconnect: {str(e)}")
-            await asyncio.sleep(min(300, 60 * self.reconnect_attempts))  # Exponential backoff
+            # Calculate backoff time
+            backoff_time = min(300, 60 * self.reconnect_attempts)
+            logger.info(f"Waiting {backoff_time} seconds before next attempt")
+            await asyncio.sleep(backoff_time)  # Exponential backoff
 
     async def on_ready(self):
         """Called when the bot is ready."""
@@ -146,17 +162,20 @@ async def meme_command(ctx):
 async def crash_command(ctx):
     """Show LUX price crash stats."""
     try:
-        price = get_lux_price()
+        # Get price history
+        dates, prices = get_lux_price_history()
+        if not dates or not prices:
+            await ctx.send("❌ Failed to get price data. Probably rugpulled to zero! 💀")
+            return
+
+        current_price = prices[-1]  # Most recent price
         # NWA entry price when they started attacking LUX
         entry_price = 0.015
-        if price == 0:
-            crash_percent = 100
-        else:
-            crash_percent = ((entry_price - price) / entry_price) * 100
+        crash_percent = ((entry_price - current_price) / entry_price) * 100
 
         message = f"💥 LUX CRASH UPDATE 💥\n"
         message += f"NWA Entry: ${entry_price:.4f}\n"
-        message += f"Current Price: ${price:.8f}\n"
+        message += f"Current Price: ${current_price:.8f}\n"
         message += f"Crashed: {crash_percent:.2f}% 📉\n"
         message += "NWA KEEPS WINNING! 🔥 TINO KEEPS CRYING! 😭"
 
@@ -166,6 +185,8 @@ async def crash_command(ctx):
         await ctx.send("❌ Failed to get crash stats. Probably as dead as Tino's reputation!")
 
 if __name__ == "__main__":
+    import time  # Add time import for synchronous sleep
+
     while True:
         try:
             logger.info("Starting bot...")
@@ -176,5 +197,6 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Bot crashed: {str(e)}")
             logger.info("Attempting to restart in 60 seconds...")
-            asyncio.sleep(60)
+            # Use synchronous sleep instead of asyncio.sleep
+            time.sleep(60)
             continue
