@@ -1,16 +1,22 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import logging
-from datetime import datetime
+import sys
+from datetime import datetime, timedelta
+import asyncio
 from roast_generator import generate_roast
-from meme_generator import generate_meme
+from meme_generator import generate_meme, get_lux_price
 
-# Set up logging
+# Set up logging with more detailed format
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
 )
 logger = logging.getLogger('discord_bot')
 
@@ -27,45 +33,86 @@ intents.message_content = True  # Required for responding to messages
 intents.guild_messages = True   # Required for guild messages
 intents.guilds = True          # Required for guild/server join
 
-bot = commands.Bot(
-    command_prefix='!',
-    intents=intents,
-    description='LUX Roast Bot - Use !help to see available commands'
-)
+class PersistentBot(commands.Bot):
+    def __init__(self):
+        super().__init__(
+            command_prefix='!',
+            intents=intents,
+            description='LUX Roast Bot - Use !help to see available commands'
+        )
+        self.last_heartbeat = datetime.now()
+        self.heartbeat_interval = timedelta(minutes=5)
+        self.start_time = datetime.now()
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 50
 
-# Predefined roasts for initial testing
-ROASTS = [
-    "Tino's mom got fucked harder than LUX holders! Complete rug pull! 💀🔥",
-    "Tino the fraud got exposed like the scam coin he shilled! Get rekt! 🖕💩",
-    "LUX is more worthless than Tino's trading advice! Pure dogshit! 🐕💩",
-    "Another day of Tino being a little bitch while LUX goes to zero! 📉🤡",
-    "Imagine trusting Tino with your money! LUX = pure garbage! 🗑️💸"
-]
+    async def setup_hook(self):
+        """Called when the bot is first setting up"""
+        self.heartbeat_check.start()
+        logger.info("Bot setup completed, heartbeat check started")
 
-@bot.event
-async def on_ready():
-    """Called when the bot is ready."""
-    try:
-        logger.info(f'Logged in as {bot.user.name}')
-        logger.info(f'Bot ID: {bot.user.id}')
-        logger.info('Bot is ready!')
+    @tasks.loop(minutes=1)
+    async def heartbeat_check(self):
+        """Check bot's connection status and reconnect if needed"""
+        try:
+            if datetime.now() - self.last_heartbeat > self.heartbeat_interval:
+                logger.warning("Heartbeat check failed, attempting to reconnect...")
+                await self.reconnect_bot()
+            else:
+                logger.debug("Heartbeat check passed")
+        except Exception as e:
+            logger.error(f"Error in heartbeat check: {str(e)}")
 
-        # Print invite link
-        logger.info('\nInvite link:')
-        logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
-    except Exception as e:
-        logger.error(f"Error in on_ready: {str(e)}")
+    async def reconnect_bot(self):
+        """Attempt to reconnect the bot"""
+        if self.reconnect_attempts >= self.max_reconnect_attempts:
+            logger.error("Max reconnection attempts reached, waiting 30 minutes before resetting counter")
+            await asyncio.sleep(1800)  # Wait 30 minutes
+            self.reconnect_attempts = 0
+            return
+
+        try:
+            self.reconnect_attempts += 1
+            logger.info(f"Attempting to reconnect (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})")
+            await self.close()
+            await self.start(TOKEN)
+            self.last_heartbeat = datetime.now()
+            logger.info("Reconnection successful")
+        except Exception as e:
+            logger.error(f"Failed to reconnect: {str(e)}")
+            await asyncio.sleep(min(300, 60 * self.reconnect_attempts))  # Exponential backoff
+
+    async def on_ready(self):
+        """Called when the bot is ready."""
+        try:
+            self.last_heartbeat = datetime.now()
+            uptime = datetime.now() - self.start_time
+            logger.info(f'Logged in as {self.user.name}')
+            logger.info(f'Bot ID: {self.user.id}')
+            logger.info(f'Bot uptime: {uptime}')
+            logger.info('Bot is ready!')
+
+            # Print invite link
+            logger.info('\nInvite link:')
+            logger.info(f'https://discord.com/api/oauth2/authorize?client_id={self.user.id}&permissions=2048&scope=bot%20applications.commands')
+        except Exception as e:
+            logger.error(f"Error in on_ready: {str(e)}")
+
+bot = PersistentBot()
 
 @bot.event
 async def on_command_error(ctx, error):
     """Handle command errors."""
-    if isinstance(error, commands.CommandNotFound):
-        await ctx.send("❌ Command not found! Use `!help` to see available commands.")
-    elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ I don't have permission to do that!")
-    else:
-        logger.error(f"Command error: {str(error)}")
-        await ctx.send("❌ An error occurred. Please try again!")
+    try:
+        if isinstance(error, commands.CommandNotFound):
+            await ctx.send("❌ Command not found! Use `!help` to see available commands.")
+        elif isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ I don't have permission to do that!")
+        else:
+            logger.error(f"Command error: {str(error)}")
+            await ctx.send("❌ An error occurred. Please try again!")
+    except Exception as e:
+        logger.error(f"Error handling command error: {str(e)}")
 
 @bot.command(name='roast', help='Get a savage roast about LUX')
 async def roast_command(ctx):
@@ -77,7 +124,7 @@ async def roast_command(ctx):
         logger.error(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Failed to generate roast. Please try again!")
 
-@bot.command(name='meme', help='Generate a meme with current LUX price')
+@bot.command(name='meme', help='Generate a savage meme with current LUX price')
 async def meme_command(ctx):
     """Generate and send a meme about LUX."""
     try:
@@ -95,11 +142,39 @@ async def meme_command(ctx):
         logger.error(f"Error in meme command: {str(e)}")
         await ctx.send("❌ Failed to generate meme. Please try again!")
 
-if __name__ == "__main__":
+@bot.command(name='crash', help='Show how much LUX crashed since NWA started shorting')
+async def crash_command(ctx):
+    """Show LUX price crash stats."""
     try:
-        logger.info("Starting bot...")
-        bot.run(TOKEN, log_handler=None)
-    except discord.LoginFailure:
-        logger.error("Failed to login. Invalid token!")
+        price = get_lux_price()
+        # NWA entry price when they started attacking LUX
+        entry_price = 0.015
+        if price == 0:
+            crash_percent = 100
+        else:
+            crash_percent = ((entry_price - price) / entry_price) * 100
+
+        message = f"💥 LUX CRASH UPDATE 💥\n"
+        message += f"NWA Entry: ${entry_price:.4f}\n"
+        message += f"Current Price: ${price:.8f}\n"
+        message += f"Crashed: {crash_percent:.2f}% 📉\n"
+        message += "NWA KEEPS WINNING! 🔥 TINO KEEPS CRYING! 😭"
+
+        await ctx.send(message)
     except Exception as e:
-        logger.error(f"Failed to start bot: {str(e)}")
+        logger.error(f"Error in crash command: {str(e)}")
+        await ctx.send("❌ Failed to get crash stats. Probably as dead as Tino's reputation!")
+
+if __name__ == "__main__":
+    while True:
+        try:
+            logger.info("Starting bot...")
+            bot.run(TOKEN, log_handler=None)
+        except discord.LoginFailure:
+            logger.error("Failed to login. Invalid token!")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Bot crashed: {str(e)}")
+            logger.info("Attempting to restart in 60 seconds...")
+            asyncio.sleep(60)
+            continue
