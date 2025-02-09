@@ -34,17 +34,24 @@ def format_price_label(price):
     return f"{cents:.1f}¢"
 
 def format_time_label(timestamp):
-    """Format time label in a human-friendly way."""
+    """Format time label in a human-friendly way with 15-minute intervals."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
         now = datetime.now(eastern)
 
-        # If timestamp is from a different day, include the date
+        # Round to nearest 15 minutes
+        minutes = eastern_time.minute
+        rounded_minutes = round(minutes / 15) * 15
+        eastern_time = eastern_time.replace(minute=rounded_minutes, second=0, microsecond=0)
+
+        # Format without leading zeros for hours
         if eastern_time.date() != now.date():
-            return eastern_time.strftime("%m/%d\n%I:%M %p")
+            # For different days, include date with non-zero-padded month/day
+            return eastern_time.strftime("%-m/%-d\n%-I:%M %p")
         else:
-            return eastern_time.strftime("%I:%M %p")
+            # For same day, just show time without leading zeros
+            return eastern_time.strftime("%-I:%M %p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
