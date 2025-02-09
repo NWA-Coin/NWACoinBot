@@ -51,11 +51,11 @@ async def generate_meme(timeframe="1hr"):
         if crash_percent >= 90:
             roast = f"DOWN {crash_percent:.1f}%! {timeframe_text} ({price_str}) COMPLETE RUGPULL"
         elif crash_percent >= 70:
-            roast = f"DUMPED {crash_percent:.1f}%! {timeframe_text} ({price_str}) TINO IN SHAMBLES"
+            roast = f"DUMPED {crash_percent:.1f}%! {timeframe_text} ({price_str}) SINCE NWA TAKEOVER"
         elif crash_percent >= 50:
             roast = f"CRASHING {crash_percent:.1f}%! {timeframe_text} ({price_str}) NWA WINS AGAIN"
         else:
-            roast = f"DUMPING {crash_percent:.1f}%! {timeframe_text} ({price_str}) TINO'S REPUTATION"
+            roast = f"DUMPING {crash_percent:.1f}%! {timeframe_text} ({price_str}) SINCE NWA TAKEOVER"
 
         logger.info(f"Generated roast text: {roast}")
 
