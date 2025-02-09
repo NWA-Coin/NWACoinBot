@@ -86,13 +86,20 @@ async def lux_price(ctx):
     try:
         async with ctx.typing():
             logger.info("Generating price chart...")
-            chart = generate_price_chart()
-            if chart:
-                logger.info("Price chart generated successfully")
-                await ctx.send(
-                    "💰 Current LUX/USD Price:",
-                    file=discord.File(fp=chart, filename='lux_price.png')
-                )
+            chart_buffer = generate_price_chart()
+
+            if chart_buffer:
+                try:
+                    await ctx.send(
+                        "💰 Current LUX/USD Price:",
+                        file=discord.File(fp=chart_buffer, filename='lux_price.png')
+                    )
+                    logger.info("Price chart sent successfully")
+                except Exception as e:
+                    logger.error(f"Failed to send price chart: {str(e)}")
+                    await ctx.send("❌ Failed to send price chart. Please try again!")
+                finally:
+                    chart_buffer.close()
             else:
                 logger.error("Failed to generate price chart")
                 await ctx.send("❌ Failed to fetch price data. Market might be down or API rate limit reached. Try again in a few minutes!")
