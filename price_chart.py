@@ -21,7 +21,7 @@ async def get_lux_price_history(timeframe="1hr"):
             logger.info(f"Successfully retrieved {len(prices)} price points")
             logger.info(f"Latest price: ${prices[-1]:.6f}")
             return timestamps, prices
-
+        
         logger.warning("Failed to fetch price data")
         return None, None
     except Exception as e:
@@ -51,7 +51,11 @@ async def create_price_chart(timeframe="1hr"):
         timestamps, prices = await get_lux_price_history(timeframe)
         if not timestamps or not prices:
             logger.error("Failed to get price data")
-            return None
+            return None, None, None
+
+        # Log price data for debugging
+        logger.info(f"Price data points: {len(prices)}")
+        logger.info(f"First price: ${prices[0]:.6f}, Last price: ${prices[-1]:.6f}")
 
         # Chart dimensions
         width = 1280
@@ -71,10 +75,8 @@ async def create_price_chart(timeframe="1hr"):
         min_price = min(prices) * 0.98  # Add 2% padding
         price_range = max_price - min_price
 
-        # Load font with increased size for better readability
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)  # Increased font size
-            logger.info("Loaded custom font successfully")
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             font = ImageFont.load_default()
@@ -82,34 +84,26 @@ async def create_price_chart(timeframe="1hr"):
         # Draw grid and labels
         grid_color = '#2F3136'
         label_color = '#FFFFFF'
-        line_color = '#FF3333'  # Brighter red for better visibility
+        line_color = '#FF3333'
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
             price = min_price + (i * (price_range / 5))
             y = padding + ((max_price - price) * chart_height / price_range)
-
-            # Grid line
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
-
-            # Price label
             price_str = format_price_label(price)
-            draw.text((10, y - 16), price_str, fill=label_color, font=font)  # Adjusted y-offset
+            draw.text((10, y - 16), price_str, fill=label_color, font=font)
 
         # Draw time labels and vertical grid lines
         num_labels = 6
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
             timestamp = timestamps[0] + (i * (timestamps[-1] - timestamps[0]) / (num_labels - 1))
-
-            # Grid line
             draw.line([(x, padding), (x, height - padding)], fill=grid_color)
-
-            # Time label
             time_str = format_time_label(timestamp)
-            draw.text((x - 25, height - padding + 10), time_str, fill=label_color, font=font)  # Adjusted x-offset
+            draw.text((x - 25, height - padding + 10), time_str, fill=label_color, font=font)
 
-        # Draw price line with increased thickness
+        # Draw price line
         points = []
         for timestamp, price in zip(timestamps, prices):
             x = padding + ((timestamp - timestamps[0]) * chart_width / (timestamps[-1] - timestamps[0]))
@@ -117,17 +111,17 @@ async def create_price_chart(timeframe="1hr"):
             points.append((x, y))
 
         if len(points) > 1:
-            # Draw thicker background line for glow effect
-            draw.line(points, fill='#FF6666', width=5)  # Wider background
+            draw.line(points, fill='#FF6666', width=5)  # Background glow
             draw.line(points, fill=line_color, width=3)  # Main line
 
-        # Save chart with high quality
+        # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"
         img.save(chart_path, quality=95)
         logger.info(f"Successfully saved chart: {chart_path}")
-        return chart_path
+
+        return chart_path, timestamps, prices
 
     except Exception as e:
         logger.error(f"Error creating chart: {str(e)}")
         logger.exception("Full traceback:")
-        return None
+        return None, None, None

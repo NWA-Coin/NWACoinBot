@@ -5,11 +5,14 @@ from dotenv import load_dotenv
 import logging
 import sys
 import time
-import asyncio
 from datetime import datetime, timedelta
-from meme_generator import generate_meme
+import asyncio
+import signal
+import atexit
+from keep_alive import keep_alive
 from roast_generator import generate_roast
-from price_chart import get_lux_price_history
+from meme_generator import generate_meme
+from price_chart import get_lux_price_history, format_price_label
 
 # Set up logging with a single handler
 logging.basicConfig(
@@ -26,6 +29,9 @@ if not TOKEN:
     logger.error("No Discord token found!")
     exit(1)
 
+# Start the keep-alive server before bot initialization
+keep_alive()
+
 # Bot setup with enhanced reconnect settings
 intents = discord.Intents.default()
 intents.message_content = True
@@ -34,9 +40,9 @@ bot = commands.Bot(
     intents=intents,
     reconnect=True,
     case_insensitive=True,
-    max_messages=10000,  # Increase message cache
-    chunk_guilds_at_startup=False,  # Faster startup
-    heartbeat_timeout=150.0  # Increased heartbeat timeout
+    max_messages=10000,
+    chunk_guilds_at_startup=False,
+    heartbeat_timeout=150.0
 )
 
 # Remove default help command
@@ -46,6 +52,11 @@ bot.remove_command('help')
 last_heartbeat = datetime.now()
 reconnect_attempts = 0
 MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+
+# Enhanced keep-alive settings
+KEEP_ALIVE_INTERVAL = 15  # Check every 15 seconds
+HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
+RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
 
 @bot.event
 async def on_ready():
@@ -59,10 +70,9 @@ async def on_ready():
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
-    # Start keep-alive and heartbeat monitoring tasks
-    bot.loop.create_task(keep_alive())
+    # Only start heartbeat monitoring task
     bot.loop.create_task(monitor_heartbeat())
-    logger.info("Started keep-alive and heartbeat monitoring tasks")
+    logger.info("Started heartbeat monitoring task")
 
 async def keep_alive():
     """Enhanced keep-alive loop to maintain bot connection"""
@@ -77,7 +87,7 @@ async def keep_alive():
                     activity=discord.Game(name="!help | Roasting LUX"),
                     status=discord.Status.online
                 )
-                await asyncio.sleep(15)  # Check every 15 seconds
+                await asyncio.sleep(KEEP_ALIVE_INTERVAL)
             else:
                 logger.warning("Keep-alive detected closed connection")
                 await handle_disconnection()
@@ -92,8 +102,8 @@ async def monitor_heartbeat():
     while True:
         try:
             await asyncio.sleep(30)  # Check every 30 seconds
-            if datetime.now() - last_heartbeat > timedelta(minutes=2):
-                logger.warning("No heartbeat detected for 2 minutes")
+            if datetime.now() - last_heartbeat > timedelta(seconds=HEARTBEAT_TIMEOUT):
+                logger.warning(f"No heartbeat detected for {HEARTBEAT_TIMEOUT} seconds")
                 await handle_disconnection()
         except Exception as e:
             logger.error(f"Error in heartbeat monitor: {str(e)}")
@@ -104,7 +114,7 @@ async def handle_disconnection():
     global reconnect_attempts
     try:
         reconnect_attempts += 1
-        delay = min(5 * (2 ** (reconnect_attempts - 1)), MAX_RECONNECT_DELAY)
+        delay = min(RECONNECT_BASE_DELAY * (2 ** (reconnect_attempts - 1)), MAX_RECONNECT_DELAY)
         logger.info(f"Attempting reconnection (attempt {reconnect_attempts}) after {delay}s delay")
 
         if not bot.is_closed():
@@ -113,8 +123,10 @@ async def handle_disconnection():
         await asyncio.sleep(delay)
 
         if bot.is_closed():
+            # Force restart the entire bot if needed
             await bot.start(TOKEN, reconnect=True)
-
+            logger.info("Bot successfully reconnected")
+            await update_bot_status()
     except Exception as e:
         logger.error(f"Reconnection attempt failed: {str(e)}")
         await asyncio.sleep(5)
@@ -143,19 +155,22 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # Add more detailed logging
+    logger.info(f"Received message: {message.content[:50]}... from {message.author}")
+
     # Only process messages from guilds (servers), not DMs
     if not message.guild:
+        logger.info("Ignoring DM message")
         return
 
-    # Process commands with error handling
+    # Process commands with enhanced error handling
     if message.content.startswith(bot.command_prefix):
         logger.info(f"Processing command: {message.content} from {message.author}")
         try:
-            ctx = await bot.get_context(message)
-            if ctx.valid:
-                await bot.invoke(ctx)
+            await bot.process_commands(message)
         except Exception as e:
             logger.error(f"Error processing command: {str(e)}")
+            logger.exception("Full command processing traceback:")
             await message.channel.send("❌ Error processing command. Please try again.")
 
 @bot.event
@@ -221,7 +236,7 @@ async def roast(ctx):
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
 async def meme(ctx, timeframe: str = "1hr"):
     """Generate price chart meme with specified timeframe"""
-    logger.info(f'Executing meme command for {ctx.author} with timeframe {timeframe}')
+    logger.info(f'Starting meme command execution for {ctx.author} with timeframe {timeframe}')
     try:
         await update_bot_status()
 
@@ -232,19 +247,23 @@ async def meme(ctx, timeframe: str = "1hr"):
             await ctx.send("❌ Invalid timeframe! Use 5m, 15m, or 1hr")
             return
 
-        logger.info(f"Starting meme generation with timeframe {timeframe}")
+        # Send initial message
+        logger.info(f"Sending initial message for timeframe {timeframe}")
         message = await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
 
-        logger.info("Calling generate_meme function...")
+        # Generate meme
+        logger.info("Starting meme generation process")
         meme_path = await generate_meme(timeframe)
-        logger.info(f"Generated meme path: {meme_path}")
+        logger.info(f"Meme generation completed, path: {meme_path}")
 
         if meme_path and os.path.exists(meme_path):
             try:
+                # Send the meme file
+                logger.info("Sending meme file to Discord")
                 with open(meme_path, 'rb') as f:
                     await ctx.send(file=discord.File(f))
-                logger.info("Successfully sent meme file")
                 await message.delete()
+                logger.info("Successfully sent meme and cleaned up message")
             except Exception as e:
                 logger.error(f"Error sending meme file: {str(e)}")
                 await message.edit(content="Failed to send meme! Error occurred while sending file.")
@@ -320,6 +339,28 @@ def format_price_label(price):
     price_in_cents = price * 100
     return f"{price_in_cents:.2f}¢"
 
+# Enhanced shutdown handling
+def cleanup():
+    """Cleanup function to handle graceful shutdown"""
+    logger.info("Bot cleanup initiated")
+    if not bot.is_closed():
+        logger.info("Closing bot connection...")
+        asyncio.run_coroutine_threadsafe(bot.close(), bot.loop)
+    logger.info("Cleanup complete")
+
+atexit.register(cleanup)
+
+# Signal handlers for graceful shutdown
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    logger.info(f"Received signal {signum}")
+    cleanup()
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+
 if __name__ == "__main__":
     restart_delay = 5
     max_retries = float('inf')  # Infinite retries
@@ -328,9 +369,10 @@ if __name__ == "__main__":
 
     while retry_count < max_retries:
         try:
-            logger.info("Starting bot with enhanced logging...")
+            logger.info("Starting bot with enhanced logging and auto-restart...")
             logger.info(f"Discord Token length: {len(TOKEN) if TOKEN else 0}")
             logger.info("Initializing bot connection...")
+
             # Enhanced connection settings
             bot.run(
                 TOKEN,
@@ -341,10 +383,11 @@ if __name__ == "__main__":
         except discord.LoginFailure as e:
             logger.error(f"Failed to login: {str(e)}")
             logger.error("Please check if the Discord token is valid")
-            break  # Exit on authentication failure
+            sys.exit(1)  # Exit on authentication failure
         except Exception as e:
             retry_count += 1
             current_time = datetime.now()
+
             # Reset retry count if last restart was more than 1 hour ago
             if current_time - last_restart > timedelta(hours=1):
                 retry_count = 0
@@ -353,6 +396,8 @@ if __name__ == "__main__":
             logger.error(f"Bot crashed (attempt {retry_count}): {str(e)}")
             logger.error(f"Restarting in {restart_delay} seconds...")
             logger.exception("Full traceback:")
+
+            # Sleep before retry
             time.sleep(restart_delay)
             # Increase delay for next retry, max 30 seconds
             restart_delay = min(restart_delay * 2, 30)
