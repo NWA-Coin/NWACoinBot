@@ -9,15 +9,13 @@ logger = logging.getLogger('discord_bot')
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# Fallback roasts with NWA references
+# Fallback roasts
 FALLBACK_ROASTS = [
-    "Straight Outta Value! LUX dropping harder than NWA's basslines! 🎤💀",
-    "LUX got less value than a bootleg tape from Compton! Pure Trash! 📉🎵",
-    "Even Ice Cube thinks LUX's price is too cold! Complete Garbage! 🧊💸",
-    "LUX just got more rekt than Eazy-E's competition! You Got Nothing! 🎤💥",
-    "LUX chart looking like it got stomped by the whole crew! Get Rekt! 👊💀",
-    "Down so bad even Dr. Dre can't mix this shit right! Complete Trash! 🎧📉",
-    "Your investment's more fucked than Death Row Records! Pure Garbage! ⚰️💀"
+    "Tino's mom got fucked harder than LUX holders! Complete rug pull! 💀🔥",
+    "Tino the fraud got exposed like the scam coin he shilled! Get rekt! 🖕💩",
+    "LUX is more worthless than Tino's trading advice! Pure dogshit! 🐕💩",
+    "Another day of Tino being a little bitch while LUX goes to zero! 📉🤡",
+    "Imagine trusting Tino with your money! LUX = pure garbage! 🗑️💸"
 ]
 
 def generate_roast(max_retries=3):
@@ -31,11 +29,11 @@ def generate_roast(max_retries=3):
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a savage roast generator for cryptocurrency. Create an extremely aggressive, vulgar roast about the Lux cryptocurrency that references NWA, gangsta rap, and its terrible performance. Make it extremely harsh and vulgar. Use words like 'trash', 'garbage', 'worthless', 'rekt'. Keep it under 100 characters. Include relevant emojis."
+                            "content": "You are a savage roast generator for cryptocurrency. Create an extremely aggressive roast about the Lux cryptocurrency. Focus on Tino being a fraud/scammer, mock his mom, and emphasize how LUX is a complete scam/rug pull. Use words like 'dogshit', 'scam', 'fraud', 'bitch'. Keep it under 100 characters. Include relevant emojis. Be as offensive as possible."
                         },
                         {
                             "role": "user",
-                            "content": "Generate a savage roast about Lux coin."
+                            "content": "Generate a savage roast about Lux coin and Tino."
                         }
                     ],
                     max_tokens=50,

@@ -4,6 +4,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 from datetime import datetime
+from roast_generator import generate_roast
 
 # Set up logging
 logging.basicConfig(
@@ -33,11 +34,11 @@ bot = commands.Bot(
 
 # Predefined roasts for initial testing
 ROASTS = [
-    "LUX just got more rekt than Eazy-E's competition! You Got Nothing! 🎤💥",
-    "Straight Outta Value! LUX dropping harder than NWA's basslines! 🎤💀",
-    "Even Ice Cube thinks LUX's price is too cold! Complete Garbage! 🧊💸",
-    "Down so bad even Dr. Dre can't mix this shit right! Complete Trash! 🎧📉",
-    "Your investment's more fucked than Death Row Records! Pure Garbage! ⚰️💀"
+    "Tino's mom got fucked harder than LUX holders! Complete rug pull! 💀🔥",
+    "Tino the fraud got exposed like the scam coin he shilled! Get rekt! 🖕💩",
+    "LUX is more worthless than Tino's trading advice! Pure dogshit! 🐕💩",
+    "Another day of Tino being a little bitch while LUX goes to zero! 📉🤡",
+    "Imagine trusting Tino with your money! LUX = pure garbage! 🗑️💸"
 ]
 
 @bot.event
@@ -69,8 +70,7 @@ async def on_command_error(ctx, error):
 async def roast_command(ctx):
     """Generate a roast about LUX."""
     try:
-        import random
-        roast = random.choice(ROASTS)
+        roast = generate_roast()
         await ctx.send(roast)
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
