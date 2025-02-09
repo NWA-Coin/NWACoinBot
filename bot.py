@@ -74,24 +74,20 @@ async def on_command_error(ctx, error):
 @bot.command(name='lux', help="Show current LUX token price with 24h change")
 async def lux_price(ctx):
     """Show current LUX token price."""
-    cmd_key = f"lux_{ctx.channel.id}"
-    current_time = asyncio.get_event_loop().time()
-
-    if cmd_key in command_cooldowns:
-        return  # Ignore if command is on cooldown
-
-    command_cooldowns[cmd_key] = current_time
     logger.info(f"Processing !lux command from {ctx.author}")
 
     try:
         async with ctx.typing():
+            # First send a message to confirm the command is received
+            await ctx.send("📊 Generating price chart...")
+
             logger.info("Generating price chart...")
             chart_buffer = generate_price_chart()
 
             if chart_buffer:
                 try:
                     await ctx.send(
-                        "💰 Current LUX/USD Price:",
+                        "💰 LUX Price Chart:",
                         file=discord.File(fp=chart_buffer, filename='lux_price.png')
                     )
                     logger.info("Price chart sent successfully")
