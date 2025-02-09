@@ -13,6 +13,7 @@ from keep_alive import keep_alive
 from roast_generator import generate_roast
 from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
+from supervisor import BotSupervisor
 
 # Set up logging with a single handler
 logging.basicConfig(
@@ -58,6 +59,9 @@ KEEP_ALIVE_INTERVAL = 15  # Check every 15 seconds
 HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
 RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
 
+supervisor = BotSupervisor()
+supervisor.setup_signal_handlers()
+
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects/reconnects"""
@@ -70,9 +74,9 @@ async def on_ready():
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
-    # Only start heartbeat monitoring task
-    bot.loop.create_task(monitor_heartbeat())
-    logger.info("Started heartbeat monitoring task")
+    # Start supervisor monitoring
+    bot.loop.create_task(supervisor.monitor(bot))
+    logger.info("Started bot supervisor monitoring")
 
 async def keep_alive():
     """Enhanced keep-alive loop to maintain bot connection"""
@@ -362,44 +366,10 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 if __name__ == "__main__":
-    restart_delay = 5
-    max_retries = float('inf')  # Infinite retries
-    retry_count = 0
-    last_restart = datetime.now()
-
-    while retry_count < max_retries:
-        try:
-            logger.info("Starting bot with enhanced logging and auto-restart...")
-            logger.info(f"Discord Token length: {len(TOKEN) if TOKEN else 0}")
-            logger.info("Initializing bot connection...")
-
-            # Enhanced connection settings
-            bot.run(
-                TOKEN,
-                reconnect=True,
-                log_handler=None,  # Prevent duplicate logging
-                log_formatter=None
-            )
-        except discord.LoginFailure as e:
-            logger.error(f"Failed to login: {str(e)}")
-            logger.error("Please check if the Discord token is valid")
-            sys.exit(1)  # Exit on authentication failure
-        except Exception as e:
-            retry_count += 1
-            current_time = datetime.now()
-
-            # Reset retry count if last restart was more than 1 hour ago
-            if current_time - last_restart > timedelta(hours=1):
-                retry_count = 0
-                restart_delay = 5
-
-            logger.error(f"Bot crashed (attempt {retry_count}): {str(e)}")
-            logger.error(f"Restarting in {restart_delay} seconds...")
-            logger.exception("Full traceback:")
-
-            # Sleep before retry
-            time.sleep(restart_delay)
-            # Increase delay for next retry, max 30 seconds
-            restart_delay = min(restart_delay * 2, 30)
-            last_restart = current_time
-            continue
+    try:
+        logger.info("Starting bot with enhanced supervision...")
+        bot.run(TOKEN)
+    except Exception as e:
+        logger.critical(f"Critical bot error: {str(e)}")
+        logger.exception("Full traceback:")
+        sys.exit(1)  # Let the process manager handle restart

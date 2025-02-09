@@ -34,11 +34,17 @@ def format_price_label(price):
     return f"{cents:.1f}¢"
 
 def format_time_label(timestamp):
-    """Simple time label format."""
+    """Format time label in a human-friendly way."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
-        return eastern_time.strftime("%H:%M")
+        now = datetime.now(eastern)
+
+        # If timestamp is from a different day, include the date
+        if eastern_time.date() != now.date():
+            return eastern_time.strftime("%m/%d\n%I:%M %p")
+        else:
+            return eastern_time.strftime("%I:%M %p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
