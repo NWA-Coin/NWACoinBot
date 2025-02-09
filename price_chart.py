@@ -201,8 +201,8 @@ async def create_price_chart():
             high_y = padding + ((max_price - candle['high']) * chart_height / price_range)
             low_y = padding + ((max_price - candle['low']) * chart_height / price_range)
 
-            # Determine candle color
-            color = '#44FF44' if candle['close'] > candle['open'] else '#FF4444'
+            # Use red for all candles since it's a downtrend
+            color = '#FF0000'  # Pure red for stronger visual impact
 
             # Draw wick
             draw.line([(x + candle_width/2, high_y), (x + candle_width/2, low_y)], fill=color, width=1)
@@ -215,14 +215,6 @@ async def create_price_chart():
             # Use tuple format for rectangle coordinates
             draw.rectangle((x, body_top, x + candle_width, body_bottom), fill=color, outline=color)
 
-        # Add title and crash percentage
-        entry_price = 0.015  # NWA entry price in USD (1.5 cents)
-        current_price = 0.0037  # Current LUX price in USD (0.37 cents)
-        crash_percent = ((entry_price - current_price) / entry_price) * 100
-        price_in_cents = current_price * 100
-
-        title = f"LUX 30m Chart | Down {crash_percent:.2f}% | Current: {price_in_cents:.2f}¢"
-        draw.text((width//2 - 250, 20), title, fill='white', font=font)
 
         # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"

@@ -73,21 +73,22 @@ async def generate_meme():
 
             if crash_percent is not None and price_in_cents is not None:
                 if crash_percent >= 90:
-                    roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.2f}¢) COMPLETE RUGPULL! 💀"
+                    roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.2f}¢) COMPLETE RUGPULL"
                 elif crash_percent >= 70:
-                    roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO IN SHAMBLES! 🖕"
+                    roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO IN SHAMBLES"
                 elif crash_percent >= 50:
-                    roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) NWA WINS AGAIN! 🔥"
+                    roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) NWA WINS AGAIN"
                 else:
-                    roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO'S REPUTATION! 💸"
+                    roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO'S REPUTATION"
             else:
-                roast = "LUX IS DEAD! COMPLETE RUGPULL! 💀"
+                roast = "LUX IS DEAD! COMPLETE RUGPULL"
 
-            # Add text with outline
+            # Add text with outline - repositioned higher up
             text_color = 'white'
             outline_color = 'black'
             outline_width = 2
-            text_pos = (20, 20)
+            # Moved text position higher to the top
+            text_pos = (20, 10)  # Y coordinate reduced from 20 to 10
 
             logger.info(f"Adding text overlay: {roast}")
             # Draw outline

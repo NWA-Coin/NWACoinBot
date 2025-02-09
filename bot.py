@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import logging
 import sys
 import time
+import asyncio
+from datetime import datetime, timedelta
 from meme_generator import generate_meme
 from roast_generator import generate_roast
 from price_chart import get_lux_price_history
@@ -33,7 +35,8 @@ bot = commands.Bot(
     reconnect=True,
     case_insensitive=True,
     max_messages=10000,  # Increase message cache
-    chunk_guilds_at_startup=False  # Faster startup
+    chunk_guilds_at_startup=False,  # Faster startup
+    heartbeat_timeout=150.0  # Increased heartbeat timeout
 )
 
 # Remove default help command
@@ -41,20 +44,56 @@ bot.remove_command('help')
 
 @bot.event
 async def on_ready():
+    """Called when the bot successfully connects/reconnects"""
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash')
 
+    # Ensure only one keep_alive task runs
+    for task in asyncio.all_tasks(bot.loop):
+        if task.get_name() == 'keep_alive':
+            return
+
+    # Start keep-alive loop if not already running
+    keep_alive_task = bot.loop.create_task(keep_alive(), name='keep_alive')
+    logger.info("Started keep-alive task")
+
+
+async def keep_alive():
+    """Keep-alive loop to maintain bot connection"""
+    logger.info("Starting keep-alive loop")  # Added logging
+    while True:
+        try:
+            if not bot.is_closed():
+                logger.info("Keep-alive heartbeat: Bot is active")  # Enhanced logging
+                await bot.change_presence(
+                    activity=discord.Game(name="!help | Roasting LUX"),
+                    status=discord.Status.online  # Explicitly set online status
+                )
+            else:
+                logger.warning("Keep-alive detected closed connection, attempting to reconnect")
+            await asyncio.sleep(30)  # Heartbeat every 30 seconds
+        except Exception as e:
+            logger.error(f"Error in keep-alive loop: {str(e)}")
+            await asyncio.sleep(5)  # Wait before retry
+
 @bot.event
 async def on_resumed():
     """Log when the bot resumes a session after disconnect"""
     logger.info("Bot resumed connection")
+    # Ensure keep-alive task is running
+    for task in asyncio.all_tasks(bot.loop):
+        if task.get_name() == 'keep_alive':
+            break
+    else:
+        bot.loop.create_task(keep_alive())
 
 @bot.event
 async def on_disconnect():
     """Log disconnection and attempt immediate reconnect"""
     logger.warning("Bot disconnected. Attempting to reconnect...")
+    await asyncio.sleep(1)  # Brief delay before reconnect attempt
 
 @bot.event
 async def on_error(event, *args, **kwargs):
@@ -66,6 +105,11 @@ async def on_error(event, *args, **kwargs):
 async def on_command(ctx):
     """Log when commands are used"""
     logger.info(f'Command "{ctx.command.name}" used by {ctx.author} in {ctx.guild}')
+    # Ensure bot is online when processing commands
+    await bot.change_presence(
+        activity=discord.Game(name="!help | Roasting LUX"),
+        status=discord.Status.online
+    )
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -78,12 +122,20 @@ async def on_command_error(ctx, error):
         logger.error(f'Error in command "{ctx.command}": {str(error)}')
         await ctx.send("❌ Command failed! Try !help to see available commands.")
 
+async def update_bot_status():
+    """Update bot status to online with activity"""
+    await bot.change_presence(
+        activity=discord.Game(name="!help | Roasting LUX"),
+        status=discord.Status.online
+    )
+
 @bot.command(name='roast')
 @commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
 async def roast(ctx):
     """Generate a savage roast"""
     logger.info(f'Executing roast command for {ctx.author}')
     try:
+        await update_bot_status()  # Set online immediately
         await ctx.send("🔥 Generating savage NWA roast...")
         roast_text = await generate_roast()
         await ctx.send(roast_text)
@@ -98,6 +150,7 @@ async def meme(ctx):
     """Generate price chart meme"""
     logger.info(f'Executing meme command for {ctx.author}')
     try:
+        await update_bot_status()  # Set online immediately
         await ctx.send("🔥 Generating LUX price chart... 📉")
         meme_path = await generate_meme()
 
@@ -131,6 +184,7 @@ async def crash(ctx):
     """Get current crash stats from price data"""
     logger.info(f'Executing crash command for {ctx.author}')
     try:
+        await update_bot_status()  # Set online immediately
         await ctx.send("💥 Fetching latest LUX crash data...")
         dates, prices, _ = await get_lux_price_history()  # Ignore candles
         if dates and prices:
@@ -160,6 +214,7 @@ async def crash(ctx):
 async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
+    await update_bot_status()  # Set online immediately
     help_text = """
 🔥 **$LUXSUX Bot Commands** 🔥
 • `!roast` - Get a savage roast about LUX
@@ -172,6 +227,7 @@ if __name__ == "__main__":
     restart_delay = 5
     max_retries = float('inf')  # Infinite retries
     retry_count = 0
+    last_restart = datetime.now()
 
     while retry_count < max_retries:
         try:
@@ -185,10 +241,17 @@ if __name__ == "__main__":
             )
         except Exception as e:
             retry_count += 1
+            current_time = datetime.now()
+            # Reset retry count if last restart was more than 1 hour ago
+            if current_time - last_restart > timedelta(hours=1):
+                retry_count = 0
+                restart_delay = 5
+
             logger.error(f"Bot crashed (attempt {retry_count}): {str(e)}")
             logger.error(f"Restarting in {restart_delay} seconds...")
             logger.exception("Full traceback:")
             time.sleep(restart_delay)
             # Increase delay for next retry, max 30 seconds
             restart_delay = min(restart_delay * 1.5, 30)
+            last_restart = current_time
             continue
