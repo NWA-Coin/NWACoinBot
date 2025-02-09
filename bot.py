@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 from price_chart import generate_price_chart
 from roast_generator import generate_roast
 import asyncio
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('discord_bot')
 
 # Load environment variables
 load_dotenv()
@@ -13,7 +18,7 @@ load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guild_messages = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=commands.DefaultHelpCommand())
 
 # Command cooldowns to prevent duplicate execution
 command_cooldowns = {}
@@ -28,13 +33,13 @@ def commands_ready():
 @bot.event
 async def on_ready():
     """Called when the bot is ready."""
-    print(f'Logged in as {bot.user.name}')
-    print(f'Bot ID: {bot.user.id}')
-    print('Bot is ready!')
+    logger.info(f'Logged in as {bot.user.name}')
+    logger.info(f'Bot ID: {bot.user.id}')
+    logger.info('Bot is ready!')
 
     # Print invite link
-    print('\nInvite link:')
-    print(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
+    logger.info('\nInvite link:')
+    logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -44,10 +49,10 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ I don't have permission to do that!")
     else:
-        print(f"Error: {str(error)}")
+        logger.error(f"Command error: {str(error)}")
         await ctx.send("❌ An error occurred. Please try again!")
 
-@bot.command(name='lux')
+@bot.command(name='lux', help="Show current LUX token price with 24h change")
 async def lux_price(ctx):
     """Show current LUX token price."""
     cmd_key = f"lux_{ctx.channel.id}"
@@ -57,23 +62,26 @@ async def lux_price(ctx):
         return  # Ignore if command is on cooldown
 
     command_cooldowns[cmd_key] = current_time
-    print(f"Processing !lux command from {ctx.author}")
+    logger.info(f"Processing !lux command from {ctx.author}")
 
     try:
         async with ctx.typing():
+            logger.info("Generating price chart...")
             chart = generate_price_chart()
             if chart:
+                logger.info("Price chart generated successfully")
                 await ctx.send(
                     "💰 Current LUX/USD Price:",
                     file=discord.File(fp=chart, filename='lux_price.png')
                 )
             else:
-                await ctx.send("❌ Failed to fetch price data. Please try again!")
+                logger.error("Failed to generate price chart")
+                await ctx.send("❌ Failed to fetch price data. Market might be down or API rate limit reached. Try again in a few minutes!")
     except Exception as e:
-        print(f"Error in lux command: {str(e)}")
-        await ctx.send("❌ Something went wrong. Please try again!")
+        logger.error(f"Error in lux command: {str(e)}")
+        await ctx.send("❌ Something went wrong. Please try again later!")
 
-@bot.command(name='roast')
+@bot.command(name='roast', help="Get a witty, AI-generated roast about Lux coin")
 async def roast_command(ctx):
     """Generate a roast about Lux coin."""
     cmd_key = f"roast_{ctx.channel.id}"
@@ -83,44 +91,28 @@ async def roast_command(ctx):
         return  # Ignore if command is on cooldown
 
     command_cooldowns[cmd_key] = current_time
-    print(f"Processing !roast command from {ctx.author}")
+    logger.info(f"Processing !roast command from {ctx.author}")
 
     try:
         async with ctx.typing():
+            logger.info("Generating roast...")
             roast = generate_roast()
+            logger.info(f"Generated roast: {roast}")
             await ctx.send(roast)
     except Exception as e:
-        print(f"Error in roast command: {str(e)}")
+        logger.error(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Failed to generate roast. Please try again!")
-
-@bot.command(name='help')
-async def help_command(ctx):
-    """Show available commands."""
-    cmd_key = f"help_{ctx.channel.id}"
-    current_time = asyncio.get_event_loop().time()
-
-    if cmd_key in command_cooldowns:
-        return  # Ignore if command is on cooldown
-
-    command_cooldowns[cmd_key] = current_time
-
-    help_text = """
-**Available Commands:**
-`!lux` - Show current LUX token price
-`!roast` - Get a witty roast about Lux coin
-`!help` - Show this help message
-"""
-    await ctx.send(help_text)
 
 # Run the bot
 if __name__ == "__main__":
     token = os.getenv('DISCORD_TOKEN')
     if not token:
-        print("Error: No Discord token found!")
+        logger.error("Error: No Discord token found!")
         exit(1)
     try:
+        logger.info("Starting bot...")
         bot.run(token)
     except discord.LoginFailure:
-        print("Error: Failed to login. Invalid token!")
+        logger.error("Error: Failed to login. Invalid token!")
     except Exception as e:
-        print(f"Error: Failed to start bot: {str(e)}")
+        logger.error(f"Error: Failed to start bot: {str(e)}")
