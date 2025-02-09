@@ -31,7 +31,7 @@ async def get_lux_price_history(timeframe="1hr"):
 def format_price_label(price):
     """Format price in cents."""
     cents = price * 100
-    return f"{cents:.1f}¢"
+    return f"{cents:.2f}¢"
 
 def format_time_label(timestamp):
     """Format time label in a human-friendly way with 15-minute intervals."""
