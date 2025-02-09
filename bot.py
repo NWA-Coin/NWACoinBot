@@ -4,6 +4,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 import sys
+import time
 from meme_generator import generate_meme
 from roast_generator import generate_roast
 from price_chart import get_lux_price_history
@@ -23,20 +24,43 @@ if not TOKEN:
     logger.error("No Discord token found!")
     exit(1)
 
-# Bot setup
+# Bot setup with enhanced reconnect settings
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(
+    command_prefix='!',
+    intents=intents,
+    reconnect=True,
+    case_insensitive=True,
+    max_messages=10000,  # Increase message cache
+    chunk_guilds_at_startup=False  # Faster startup
+)
 
 # Remove default help command
 bot.remove_command('help')
 
 @bot.event
 async def on_ready():
-    logger.info(f'Logged in as {bot.user.name}')
+    logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash')
+
+@bot.event
+async def on_resumed():
+    """Log when the bot resumes a session after disconnect"""
+    logger.info("Bot resumed connection")
+
+@bot.event
+async def on_disconnect():
+    """Log disconnection and attempt immediate reconnect"""
+    logger.warning("Bot disconnected. Attempting to reconnect...")
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    """Handle any uncaught exceptions"""
+    logger.error(f'Error in {event}:')
+    logger.exception('Traceback:')
 
 @bot.event
 async def on_command(ctx):
@@ -45,11 +69,17 @@ async def on_command(ctx):
 
 @bot.event
 async def on_command_error(ctx, error):
-    """Log command errors"""
-    logger.error(f'Error in command "{ctx.command}": {str(error)}')
-    await ctx.send("❌ Command failed! Try !help to see available commands.")
+    """Handle command errors gracefully"""
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"⏳ Command on cooldown. Try again in {error.retry_after:.1f}s")
+    elif isinstance(error, commands.CommandNotFound):
+        await ctx.send("❌ Command not found. Use !help to see available commands.")
+    else:
+        logger.error(f'Error in command "{ctx.command}": {str(error)}')
+        await ctx.send("❌ Command failed! Try !help to see available commands.")
 
 @bot.command(name='roast')
+@commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
 async def roast(ctx):
     """Generate a savage roast"""
     logger.info(f'Executing roast command for {ctx.author}')
@@ -63,6 +93,7 @@ async def roast(ctx):
         await ctx.send("Failed to roast! But LUX is still going to zero! 💀")
 
 @bot.command(name='meme')
+@commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
 async def meme(ctx):
     """Generate price chart meme"""
     logger.info(f'Executing meme command for {ctx.author}')
@@ -95,6 +126,7 @@ async def meme(ctx):
         await ctx.send(f"Failed to generate meme! Error: {str(e)[:100]}... 💀")
 
 @bot.command(name='crash')
+@commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
 async def crash(ctx):
     """Get current crash stats from price data"""
     logger.info(f'Executing crash command for {ctx.author}')
@@ -129,7 +161,7 @@ async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
     help_text = """
-🔥 **LUX Roast Bot Commands** 🔥
+🔥 **$LUXSUX Bot Commands** 🔥
 • `!roast` - Get a savage roast about LUX
 • `!meme` - Generate a price chart meme
 • `!crash` - See how much LUX crashed
@@ -137,5 +169,26 @@ async def help_command(ctx):
     await ctx.send(help_text)
 
 if __name__ == "__main__":
-    logger.info("Starting bot...")
-    bot.run(TOKEN)
+    restart_delay = 5
+    max_retries = float('inf')  # Infinite retries
+    retry_count = 0
+
+    while retry_count < max_retries:
+        try:
+            logger.info("Starting bot...")
+            # Enhanced connection settings
+            bot.run(
+                TOKEN,
+                reconnect=True,
+                log_handler=None,  # Prevent duplicate logging
+                log_formatter=None
+            )
+        except Exception as e:
+            retry_count += 1
+            logger.error(f"Bot crashed (attempt {retry_count}): {str(e)}")
+            logger.error(f"Restarting in {restart_delay} seconds...")
+            logger.exception("Full traceback:")
+            time.sleep(restart_delay)
+            # Increase delay for next retry, max 30 seconds
+            restart_delay = min(restart_delay * 1.5, 30)
+            continue

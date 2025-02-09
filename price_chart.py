@@ -19,32 +19,46 @@ async def get_lux_price_history():
         try:
             logger.info(f"Fetching LUX price data (attempt {attempt + 1}/{max_retries})")
 
-            # Try CoinGecko API with specific token ID
-            url = "https://api.coingecko.com/api/v3/coins/lux-token/market_chart"
-            params = {
-                "vs_currency": "usd",
-                "days": "30",
-                "interval": "daily",
-                "precision": "full"
-            }
+            # Try multiple CoinGecko API endpoints since token ID might change
+            token_ids = ["lux-token", "lux", "luxfi"]
+            last_error = None
 
-            logger.info("Making API request to CoinGecko")
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if 'prices' in data:
-                            prices = [p[1] for p in data['prices']]
-                            dates = [datetime.fromtimestamp(p[0]/1000) for p in data['prices']]
+            for token_id in token_ids:
+                try:
+                    url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart"
+                    params = {
+                        "vs_currency": "usd",
+                        "days": "30",
+                        "interval": "daily",
+                        "precision": "full"
+                    }
 
-                            if prices and dates:
-                                return dates, prices
+                    logger.info(f"Trying CoinGecko API with token ID: {token_id}")
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, params=params, timeout=10) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if 'prices' in data:
+                                    prices = [p[1] for p in data['prices']]
+                                    dates = [datetime.fromtimestamp(p[0]/1000) for p in data['prices']]
 
-                    logger.warning(f"Failed to get price data, status: {response.status}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay)
-                        continue
-                    return await generate_mock_data()
+                                    if prices and dates:
+                                        logger.info(f"Successfully fetched price data from {token_id}")
+                                        return dates, prices
+
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Failed to fetch data for {token_id}: {str(e)}")
+                    continue
+
+            # If all token IDs fail, try backup API or fallback to mock data
+            logger.warning(f"All CoinGecko attempts failed: {str(last_error)}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+
+            logger.info("Falling back to mock data generation")
+            return await generate_mock_data()
 
         except Exception as e:
             logger.error(f"Error in get_lux_price_history: {str(e)}")
@@ -105,10 +119,8 @@ def create_price_chart():
         ax.set_facecolor('#2C2F33')
 
         # Get price data asynchronously
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        loop = asyncio.get_event_loop()
         dates, prices = loop.run_until_complete(get_lux_price_history())
-        loop.close()
 
         if not dates or not prices:
             logger.error("No price data available")

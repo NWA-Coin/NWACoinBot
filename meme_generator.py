@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 from price_chart import create_price_chart, get_lux_price_history
 from PIL import Image, ImageDraw, ImageFont
+import aiohttp
 import asyncio
 
 # Set up logging
@@ -12,6 +13,22 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('discord_bot')
+
+async def get_crash_stats():
+    """Get crash stats for roast."""
+    try:
+        dates, prices = await get_lux_price_history()
+        if dates and prices:
+            entry_price = 0.015  # NWA entry price
+            current_price = prices[-1]
+            crash_percent = ((entry_price - current_price) / entry_price) * 100
+            price_in_cents = current_price * 100
+            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
+            return crash_percent, price_in_cents
+        return None, None
+    except Exception as e:
+        logger.error(f"Error getting crash stats: {str(e)}")
+        return None, None
 
 def generate_meme():
     """Generate a price chart meme with savage roast overlay."""
@@ -43,18 +60,10 @@ def generate_meme():
                 font = ImageFont.load_default()
 
             # Get crash stats for roast
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            dates, prices = loop.run_until_complete(get_lux_price_history())
-            loop.close()
+            loop = asyncio.get_event_loop()
+            crash_percent, price_in_cents = loop.run_until_complete(get_crash_stats())
 
-            if dates and prices:
-                entry_price = 0.015  # NWA entry price
-                current_price = prices[-1]
-                crash_percent = ((entry_price - current_price) / entry_price) * 100
-                price_in_cents = current_price * 100
-                logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
-
+            if crash_percent is not None and price_in_cents is not None:
                 if crash_percent >= 90:
                     roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.4f}¢) COMPLETE RUGPULL! 💀"
                 elif crash_percent >= 70:
