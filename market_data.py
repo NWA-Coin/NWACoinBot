@@ -57,7 +57,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                             logger.info("Successfully parsed JSON response")
 
                             if not data or "prices" not in data:
-                                logger.error(f"Invalid response format: {data}")
+                                logger.error("Invalid response format")
                                 if retry < MAX_RETRIES - 1:
                                     await asyncio.sleep(RETRY_DELAY * (retry + 1))
                                 continue
