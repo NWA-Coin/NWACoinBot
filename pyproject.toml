@@ -8,6 +8,7 @@ dependencies = [
     "discord-py>=2.4.0",
     "emoji>=2.14.1",
     "matplotlib>=3.10.0",
+    "numpy>=2.2.2",
     "openai>=1.61.1",
     "pillow>=11.1.0",
     "plotly>=6.0.0",
