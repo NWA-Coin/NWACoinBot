@@ -3,6 +3,7 @@ import random
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from roast_generator import generate_roast, create_meme_image
 
 # Load environment variables
 load_dotenv()
@@ -14,50 +15,6 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # Store custom roasts in memory
 CUSTOM_ROASTS = set()
-
-# Predefined roast messages
-ROASTS = [
-    "Lux coin is so slow, even Internet Explorer feels fast! 🐌",
-    "Lux's market cap is smaller than my coffee budget! ☕",
-    "Lux coin has more forks than a restaurant supply store! 🍴",
-    "Lux's roadmap is like my GPS - always 'recalculating'! 🗺️",
-    "Lux coin is so volatile, roller coasters look stable! 🎢",
-    "Lux's white paper has more plot twists than a soap opera! 📺",
-    "Investing in Lux is like trying to catch falling knives... blindfolded! 🔪",
-    "Lux coin updates slower than my grandma's internet! 👵",
-    "Lux's code has more bugs than a summer picnic! 🐜",
-    "Lux coin makes Internet Explorer look cutting edge! 💻",
-    "Lux's blockchain is moving slower than a snail in molasses! 🐌💨",
-    "Lux's smart contracts are about as smart as a rock! 🪨",
-    "Lux's transaction speed makes watching paint dry exciting! 🎨",
-    "Lux's market analysis looks like a toddler's crayon drawing! 📊",
-    "Lux coin is more unstable than my ex's mood swings! 🎭",
-    "Lux's mining rewards are smaller than my patience! ⛏️",
-    "Lux's network congestion makes rush hour traffic look smooth! 🚗",
-    "Lux's price chart looks like a heart monitor during a horror movie! 📈",
-    "Lux's development team must be using Internet Explorer for inspiration! 🌐",
-    "Lux coin has more red flags than a communist parade! 🚩",
-    "Lux's node synchronization is slower than a Windows 95 startup! 🖥️",
-    "Lux's market liquidity is drier than the Sahara desert! 🏜️",
-    "Lux's staking rewards are like finding a needle in a haystack... made of more needles! 🌾",
-    "Lux's GitHub commits are rarer than a unicorn sighting! 🦄",
-    "Lux's community governance is as organized as a cat herding competition! 😺",
-    "Lux's gas fees make premium gasoline look cheap! ⛽",
-    "Lux's token distribution is more centralized than my mom's Facebook feed! 📱",
-    "Lux's wallet interface looks like it was designed by a colorblind raccoon! 🦝",
-    "Lux's stablecoin pairs are about as stable as a house of cards in a tornado! 🌪️",
-    "Lux's blockchain explorer is more confusing than assembling IKEA furniture! 🔧",
-    "Lux's market performance is like a dumpster fire at a clown college! 🔥🤡",
-    "Lux coin holders are down so bad, they're considering OnlyFans careers! 💸",
-    "Lux's whitepaper reads like it was written by a drunk monkey on a typewriter! 🍺🐒",
-    "Lux's security is about as robust as a paper condom! 🌧️",
-    "Lux token is more useless than a screen door on a submarine! 🚪",
-    "Lux's development team must be coding with their feet! 🦶",
-    "Lux's price dumps harder than Taco Bell aftermath! 🌮",
-    "Lux's node validation is shakier than a cocaine addict's hands! 🎲",
-    "Lux's blockchain is more forked than your mom's cutlery drawer! 🍴",
-    "Lux devs are so slow, they make Internet Explorer look like The Flash! ⚡"
-]
 
 @bot.event
 async def on_ready():
@@ -71,6 +28,7 @@ async def on_ready():
         permissions = discord.Permissions()
         permissions.send_messages = True
         permissions.read_messages = True
+        permissions.attach_files = True  # Add permission to attach files for memes
 
         invite_link = discord.utils.oauth_url(
             bot.user.id,
@@ -94,12 +52,32 @@ async def roast_lux(ctx):
     """Send a random roast about Lux coin."""
     try:
         # Combine built-in and custom roasts
-        all_roasts = ROASTS + list(CUSTOM_ROASTS)
+        all_roasts = list(CUSTOM_ROASTS) + [generate_roast()]
         roast = random.choice(all_roasts)
         await ctx.send(f"🔥 {roast}")
     except Exception as e:
         print(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Oops! Something went wrong. Please try again later!")
+
+@bot.command(name='memeroast')
+async def meme_roast_lux(ctx):
+    """Send a random roast about Lux coin as a meme image."""
+    try:
+        # Combine built-in and custom roasts
+        all_roasts = list(CUSTOM_ROASTS) + [generate_roast()]
+        roast = random.choice(all_roasts)
+
+        # Generate meme image
+        meme_bytes = create_meme_image(roast)
+
+        # Send the meme
+        await ctx.send(
+            file=discord.File(fp=meme_bytes, filename='lux_roast.png'),
+            content=f"🔥 Generated a spicy meme roast for you!"
+        )
+    except Exception as e:
+        print(f"Error in memeroast command: {str(e)}")
+        await ctx.send("❌ Failed to generate meme roast. Please try again!")
 
 @bot.command(name='addroast')
 async def add_custom_roast(ctx, *, roast_text: str):
@@ -164,6 +142,7 @@ async def show_commands(ctx):
         help_text = """
 **Available Commands:**
 `!roast` - Get a random roast about Lux coin
+`!memeroast` - Get a random roast as a meme image
 `!addroast <text>` - Add your own custom roast
 `!listroasts` - Show all custom roasts with their numbers
 `!deleteroast <number>` - Delete a custom roast by its number
