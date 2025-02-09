@@ -5,7 +5,7 @@ description = "A simple Discord bot for roasting Lux coin"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.45.2",
-    "discord.py>=2.4.0",
+    "discord-py>=2.4.0",
     "emoji>=2.14.1",
     "matplotlib>=3.10.0",
     "openai>=1.61.1",

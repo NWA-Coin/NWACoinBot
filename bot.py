@@ -3,18 +3,36 @@ import random
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from roast_generator import generate_roast, create_meme_image
+from roast_generator import generate_roast
+from price_chart import generate_price_chart
 
 # Load environment variables
 load_dotenv()
 
-# Bot setup with absolute minimum intents
+# Bot setup with minimum intents
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # Store custom roasts in memory
 CUSTOM_ROASTS = set()
+
+@bot.command(name='lux')
+async def lux_price(ctx):
+    """Show LUX token price chart for the last 7 days."""
+    try:
+        async with ctx.typing():
+            chart_bytes = generate_price_chart()
+            if chart_bytes:
+                await ctx.send(
+                    "Here's the 7-day price chart for LUX/USD:",
+                    file=discord.File(fp=chart_bytes, filename='lux_chart.png')
+                )
+            else:
+                await ctx.send("❌ Failed to fetch price data. Please try again later!")
+    except Exception as e:
+        print(f"Error in lux command: {str(e)}")
+        await ctx.send("❌ Something went wrong. Please try again later!")
 
 @bot.event
 async def on_ready():
@@ -28,7 +46,6 @@ async def on_ready():
         permissions = discord.Permissions()
         permissions.send_messages = True
         permissions.read_messages = True
-        permissions.attach_files = True  # Add permission to attach files for memes
 
         invite_link = discord.utils.oauth_url(
             bot.user.id,
@@ -63,28 +80,6 @@ async def roast_lux(ctx):
     except Exception as e:
         print(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Oops! Something went wrong. Please try again later!")
-
-@bot.command(name='memeroast')
-async def meme_roast_lux(ctx):
-    """Generate a meme image with a roast."""
-    try:
-        # Get a random roast
-        roast = random.choice(list(CUSTOM_ROASTS) + [generate_roast()])
-
-        # Add fire and skull emojis
-        fire_emojis = ['🔥', '💥', '🌋']
-        skull_emojis = ['💀', '☠️', '👻']
-        decorated_roast = f"{random.choice(fire_emojis)} {roast} {random.choice(skull_emojis)}"
-
-        # Generate and send meme image
-        async with ctx.typing():
-            meme_bytes = create_meme_image(decorated_roast)
-            await ctx.send(
-                file=discord.File(fp=meme_bytes, filename='roast.png')
-            )
-    except Exception as e:
-        print(f"Error in memeroast command: {str(e)}")
-        await ctx.send("❌ Failed to generate meme. Please try again!")
 
 @bot.command(name='addroast')
 async def add_custom_roast(ctx, *, roast_text: str):
@@ -147,8 +142,8 @@ async def show_commands(ctx):
     """Show available commands."""
     try:
         help_text = """**Available Commands:**
+`!lux` - Show LUX token price chart (7 days)
 `!roast` - Get a random roast about Lux coin
-`!memeroast` - Get a random roast as a meme image
 `!addroast <text>` - Add your own custom roast
 `!listroasts` - Show all custom roasts with their numbers
 `!deleteroast <number>` - Delete a custom roast by its number"""
