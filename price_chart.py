@@ -10,24 +10,32 @@ import json
 # Set up logging
 logger = logging.getLogger('discord_bot')
 
-async def get_lux_price_history():
-    """Get LUX price history from API with 30-minute candles."""
+async def get_lux_price_history(timeframe="1hr"):
+    """Get LUX price history from API with specified timeframe."""
     max_retries = 3
     retry_delay = 2
-    last_error = None  # Initialize last_error
+    last_error = None
+
+    # Configure timeframes for proper historical data
+    timeframe_config = {
+        "5m": {"days": "0.5", "interval": "5m"},    # 12 hours of 5-min candles
+        "15m": {"days": "1", "interval": "15m"},    # 24 hours of 15-min candles
+        "1hr": {"days": "3", "interval": "1h"}      # 3 days of 1-hour candles
+    }
+
+    config = timeframe_config.get(timeframe, timeframe_config["1hr"])
 
     for attempt in range(max_retries):
         try:
-            logger.info(f"Fetching LUX price data (attempt {attempt + 1}/{max_retries})")
+            logger.info(f"Fetching LUX price data (attempt {attempt + 1}/{max_retries}) for timeframe {timeframe}")
 
-            # Use the correct CoinGecko token ID for LUX
-            token_id = "luxfi"  # LUX is listed as LUXFI on CoinGecko
+            token_id = "luxfi"
             try:
                 url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart"
                 params = {
                     "vs_currency": "usd",
-                    "days": "7",  # Last 7 days for better 30m candle visibility
-                    "interval": "30m",  # 30-minute intervals
+                    "days": config["days"],
+                    "interval": config["interval"],
                     "precision": "full"
                 }
 
@@ -37,6 +45,7 @@ async def get_lux_price_history():
                         if response.status == 200:
                             data = await response.json()
                             if 'prices' in data:
+                                # Get only recent data based on timeframe
                                 dates = [p[0] for p in data['prices']]
                                 prices = [p[1] for p in data['prices']]
 
@@ -64,9 +73,8 @@ async def get_lux_price_history():
                     await asyncio.sleep(retry_delay)
                     continue
 
-            # If API fails, fall back to mock data
             logger.warning(f"CoinGecko attempt failed: {str(last_error)}")
-            return await generate_mock_data()
+            return await generate_mock_data(timeframe)
 
         except Exception as e:
             last_error = e
@@ -75,67 +83,132 @@ async def get_lux_price_history():
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
                 continue
-            return await generate_mock_data()
+            return await generate_mock_data(timeframe)
 
     logger.error(f"All attempts failed. Last error: {str(last_error)}")
-    return await generate_mock_data()
+    return await generate_mock_data(timeframe)
 
-async def generate_mock_data():
-    """Generate realistic mock price data starting from NWA entry."""
+async def generate_mock_data(timeframe="1hr"):
+    """Generate realistic mock price data with specified timeframe."""
     try:
-        logger.warning("Using mock price data")
-        periods = 336  # 7 days of 30-minute candles
-        entry_price = 0.015  # NWA entry price in USD (1.5 cents)
-        current_price = 0.0037  # Current LUX price in USD (0.37 cents)
+        logger.warning(f"=== Using mock price data for timeframe {timeframe} ===")
+
+        # Configure periods based on timeframe for recent data
+        timeframe_config = {
+            "5m": {
+                "periods": 144,    # 12 hours (144 * 5min = 720min = 12h)
+                "price": 0.0048,   # Price from 12h ago
+                "volatility": 0.003
+            },
+            "15m": {
+                "periods": 96,     # 24 hours (96 * 15min = 1440min = 24h)
+                "price": 0.0052,   # Price from 24h ago
+                "volatility": 0.005
+            },
+            "1hr": {
+                "periods": 72,     # 3 days (72 * 1h = 72h = 3d)
+                "price": 0.015,    # NWA entry price (3d ago)
+                "volatility": 0.008
+            }
+        }
+
+        config = timeframe_config.get(timeframe, timeframe_config["1hr"])
+        periods = config["periods"]
+        start_price = config["price"]
+        base_volatility = config["volatility"]
+        current_price = 0.0037  # Current price
 
         # Calculate and log crash percentage for verification
-        crash_percent = ((entry_price - current_price) / entry_price) * 100
+        crash_percent = ((start_price - current_price) / start_price) * 100
         price_in_cents = current_price * 100
-        logger.info(f"Mock data price stats: Entry=${entry_price:.4f} (1.50¢), Current=${current_price:.4f} (0.37¢)")
-        logger.info(f"Crash percentage: Down {crash_percent:.1f}% from entry")
+
+        logger.info(f"=== Mock Data Configuration ===")
+        logger.info(f"Timeframe: {timeframe}")
+        logger.info(f"Number of periods: {periods}")
+        logger.info(f"Start price: ${start_price:.6f} ({start_price*100:.2f}¢)")
+        logger.info(f"Current price: ${current_price:.6f} ({current_price*100:.2f}¢)")
+        logger.info(f"Crash percentage: Down {crash_percent:.1f}% from start")
 
         dates = []
         prices = []
         candles = []
 
-        # Calculate price decay to reach current price
-        price_decay = (current_price / entry_price) ** (1.0 / periods)
-        logger.info(f"Mock data parameters: entry=${entry_price:.8f}, current=${current_price:.8f}, decay={price_decay:.8f}")
+        # Calculate price decay with improved exponential decay
+        price_decay = (current_price / start_price) ** (1.0 / periods)
+        logger.info(f"Price decay factor per period: {price_decay:.8f}")
+
+        # Calculate time delta based on timeframe
+        time_deltas = {
+            "5m": timedelta(minutes=5),
+            "15m": timedelta(minutes=15),
+            "1hr": timedelta(hours=1)
+        }
+        delta = time_deltas.get(timeframe, timedelta(hours=1))
+
+        # Generate price data with proper timestamps
+        logger.info(f"=== Generating {periods} candles ===")
+        now = datetime.now()
+        interval = delta.total_seconds()
 
         for i in range(periods):
-            timestamp = int((datetime.now() - timedelta(minutes=30 * (periods - i))).timestamp() * 1000)
+            # Calculate exact timestamp for this interval
+            current_timestamp = int(now.timestamp())
+            # Round down to nearest interval
+            base_timestamp = current_timestamp - (current_timestamp % int(interval))
+            timestamp = int((base_timestamp - (periods - i - 1) * interval) * 1000)
 
-            # Calculate price with decay and some randomness
+            # Format timestamp for logging
+            dt = datetime.fromtimestamp(timestamp/1000)
+            formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            # Calculate target price with exponential decay
+            target_price = start_price * (price_decay ** i)
+
+            # Add volatility that increases as price drops
+            volatility_factor = 1 + (crash_percent / 100)  # Volatility increases with crash %
+            period_volatility = base_volatility * volatility_factor
+
             if i == 0:
-                price = entry_price
+                price = start_price
+                logger.info(f"First candle - Time: {formatted_time}, Price: ${price:.6f}")
             else:
-                volatility = 0.01  # Reduced volatility for smoother downtrend
-                random_factor = 1 + np.random.normal(0, volatility)
-                price = prices[-1] * price_decay * random_factor
+                # Random walk with mean reversion to target price
+                price_diff = target_price - prices[-1]
+                mean_reversion = 0.3  # 30% reversion to target
+                random_walk = np.random.normal(0, period_volatility)
+                price = prices[-1] + (price_diff * mean_reversion) + (target_price * random_walk)
 
-            # Ensure price doesn't go below current price floor
-            price = max(price, current_price)  # Maintain minimum price
+                # Ensure price stays within realistic bounds
+                price = max(min(price, start_price), current_price * 0.95)
+
+            # Log key points in the data generation
+            if i == 0 or i == periods//2 or i == periods-1:
+                logger.info(f"Candle {i+1}/{periods} - Time: {formatted_time}, Price: ${price:.6f}")
 
             dates.append(timestamp)
             prices.append(price)
 
-            # Calculate OHLC values with smaller random variations
-            open_price = price
-            close_price = price * (1 + np.random.normal(0, 0.005))  # 0.5% variation
-            high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, 0.002)))
-            low_price = min(open_price, close_price) * (1 - abs(np.random.normal(0, 0.002)))
+            # Generate OHLC data with proper volatility
+            if i > 0:
+                prev_price = prices[-2]
+                high_price = max(price, prev_price) * (1 + abs(np.random.normal(0, period_volatility/2)))
+                low_price = min(price, prev_price) * (1 - abs(np.random.normal(0, period_volatility/2)))
+            else:
+                high_price = price * (1 + period_volatility/2)
+                low_price = price * (1 - period_volatility/2)
 
             candle = {
                 'timestamp': timestamp,
-                'open': open_price,
+                'open': prices[-1] if i > 0 else price,
                 'high': high_price,
                 'low': low_price,
-                'close': close_price
+                'close': price
             }
             candles.append(candle)
 
-        # Log the price range for verification
-        logger.info(f"Generated mock data: start=${prices[0]:.8f}, end=${prices[-1]:.8f}")
+        logger.info(f"=== Mock Data Generation Complete ===")
+        logger.info(f"Generated {len(candles)} candles from {datetime.fromtimestamp(dates[0]/1000).strftime('%Y-%m-%d %H:%M:%S')} to {datetime.fromtimestamp(dates[-1]/1000).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Final price range: ${prices[0]:.6f} -> ${prices[-1]:.6f}")
         return dates, prices, candles
 
     except Exception as e:
@@ -143,14 +216,13 @@ async def generate_mock_data():
         logger.exception("Full traceback:")
         return [], [], []
 
-# Update create_price_chart to use the new return format
-async def create_price_chart():
+async def create_price_chart(timeframe="1hr"):
     """Create a candlestick chart using PIL."""
     try:
-        logger.info("Starting candlestick chart creation")
+        logger.info(f"Starting candlestick chart creation for timeframe {timeframe}")
 
         # Get price data asynchronously
-        dates, prices, candles = await get_lux_price_history()
+        dates, prices, candles = await get_lux_price_history(timeframe)
 
         if not candles:
             logger.error("No candlestick data available")
@@ -159,7 +231,7 @@ async def create_price_chart():
         # Create new image with dark background
         width = 1280
         height = 720
-        img = Image.new('RGB', (width, height), '#2C2F33')
+        img = Image.new('RGB', (width, height), '#1E2124')  # Darker background
         draw = ImageDraw.Draw(img)
 
         # Calculate chart dimensions
@@ -167,33 +239,64 @@ async def create_price_chart():
         chart_width = width - (2 * padding)
         chart_height = height - (2 * padding)
 
-        # Calculate price range
+        # Calculate price range with padding
         high_prices = [c['high'] for c in candles]
         low_prices = [c['low'] for c in candles]
-        max_price = max(high_prices)
-        min_price = min(low_prices)
+        max_price = max(high_prices) * 1.02  # Add 2% padding
+        min_price = min(low_prices) * 0.98   # Subtract 2% padding
         price_range = max_price - min_price
 
         # Load font
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
         except Exception:
             font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
 
         # Draw grid lines and price labels
-        for i in range(5):
-            y = padding + (i * chart_height // 4)
-            draw.line([(padding, y), (width-padding, y)], fill='#666666', width=1)
-            price = max_price - (i * price_range / 4)
-            draw.text((10, y-10), f"${price:.6f}", fill='white', font=font)
+        grid_color = '#2F3136'  # Slightly lighter than background
+        for i in range(6):  # Increase number of grid lines
+            y = padding + (i * chart_height // 5)
+            draw.line([(padding, y), (width-padding, y)], fill=grid_color, width=1)
+            price = max_price - (i * price_range / 5)
+            price_str = f"${price:.6f}"
+            draw.text((10, y-10), price_str, fill='#FFFFFF', font=small_font)
 
-        # Calculate candle width
-        candle_width = min(20, (chart_width / len(candles)) * 0.8)
-        spacing = (chart_width / len(candles))
+        # Draw vertical grid lines for time
+        num_vert_lines = 8
+        for i in range(num_vert_lines + 1):
+            x = padding + (i * chart_width // num_vert_lines)
+            draw.line([(x, padding), (x, height-padding)], fill=grid_color, width=1)
+
+        # Calculate candle dimensions
+        num_candles = len(candles)
+        spacing = (chart_width / num_candles) * 0.2  # 20% of space between candles
+        candle_width = (chart_width / num_candles) * 0.8  # 80% of space for candle
+
+        # Draw time labels with proper formatting
+        for i in range(num_vert_lines + 1):
+            x = padding + (i * chart_width // num_vert_lines)
+            idx = int((i * (len(candles) - 1)) / num_vert_lines)
+            if idx < len(candles):
+                timestamp = candles[idx]['timestamp'] / 1000
+                dt = datetime.fromtimestamp(timestamp)
+
+                # Format time based on timeframe
+                if timeframe == "5m":
+                    time_str = dt.strftime("%H:%M")
+                elif timeframe == "15m":
+                    time_str = dt.strftime("%H:%M")
+                else:  # 1hr
+                    time_str = dt.strftime("%m/%d\n%H:%M")
+
+                # Center text under grid line
+                text_width = len(time_str) * 5
+                draw.text((x - text_width/2, height-padding+10), time_str, fill='#FFFFFF', font=small_font)
 
         # Draw candlesticks
         for i, candle in enumerate(candles):
-            x = padding + (i * spacing)
+            x = padding + (i * (candle_width + spacing))
 
             # Calculate y coordinates
             open_y = padding + ((max_price - candle['open']) * chart_height / price_range)
@@ -201,20 +304,27 @@ async def create_price_chart():
             high_y = padding + ((max_price - candle['high']) * chart_height / price_range)
             low_y = padding + ((max_price - candle['low']) * chart_height / price_range)
 
-            # Use red for all candles since it's a downtrend
-            color = '#FF0000'  # Pure red for stronger visual impact
+            # Determine candle color
+            color = '#FF4444' if candle['close'] < candle['open'] else '#44FF44'
 
             # Draw wick
-            draw.line([(x + candle_width/2, high_y), (x + candle_width/2, low_y)], fill=color, width=1)
+            wick_x = x + candle_width/2
+            draw.line([(wick_x, high_y), (wick_x, low_y)], fill=color, width=2)
 
             # Draw candle body
             body_top = min(open_y, close_y)
             body_bottom = max(open_y, close_y)
             body_height = max(1, body_bottom - body_top)  # Ensure minimum height of 1 pixel
 
-            # Use tuple format for rectangle coordinates
-            draw.rectangle((x, body_top, x + candle_width, body_bottom), fill=color, outline=color)
+            draw.rectangle(
+                [(x, body_top), (x + candle_width, body_bottom)],
+                fill=color,
+                outline=color
+            )
 
+        # Add chart title
+        title = f"LUX/USD {timeframe} Chart"
+        draw.text((padding, 20), title, fill='#FFFFFF', font=font)
 
         # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"

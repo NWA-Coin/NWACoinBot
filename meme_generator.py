@@ -33,14 +33,14 @@ async def get_crash_stats():
         logger.exception("Full traceback:")
         return None, None
 
-async def generate_meme():
+async def generate_meme(timeframe="1hr"):
     """Generate a price chart meme with savage roast overlay."""
     try:
         logger.info("Starting price chart meme generation")
 
         # Generate candlestick chart
-        logger.info("Calling create_price_chart")
-        chart_path = await create_price_chart()
+        logger.info(f"Calling create_price_chart with timeframe {timeframe}")
+        chart_path = await create_price_chart(timeframe)
         logger.info(f"Received chart path: {chart_path}")
 
         if not chart_path:
@@ -87,7 +87,6 @@ async def generate_meme():
             text_color = 'white'
             outline_color = 'black'
             outline_width = 2
-            # Moved text position higher to the top
             text_pos = (20, 10)  # Y coordinate reduced from 20 to 10
 
             logger.info(f"Adding text overlay: {roast}")

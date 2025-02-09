@@ -146,13 +146,20 @@ async def roast(ctx):
 
 @bot.command(name='meme')
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
-async def meme(ctx):
-    """Generate price chart meme"""
-    logger.info(f'Executing meme command for {ctx.author}')
+async def meme(ctx, timeframe: str = "1hr"):
+    """Generate price chart meme with specified timeframe"""
+    logger.info(f'Executing meme command for {ctx.author} with timeframe {timeframe}')
     try:
         await update_bot_status()  # Set online immediately
-        await ctx.send("🔥 Generating LUX price chart... 📉")
-        meme_path = await generate_meme()
+
+        # Validate timeframe
+        valid_timeframes = {"5m", "15m", "1hr"}
+        if timeframe not in valid_timeframes:
+            await ctx.send("❌ Invalid timeframe! Use 5m, 15m, or 1hr")
+            return
+
+        await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
+        meme_path = await generate_meme(timeframe)
 
         if meme_path and os.path.exists(meme_path) and meme_path.endswith('.png'):
             # Log file details before sending
@@ -218,7 +225,8 @@ async def help_command(ctx):
     help_text = """
 🔥 **$LUXSUX Bot Commands** 🔥
 • `!roast` - Get a savage roast about LUX
-• `!meme` - Generate a price chart meme
+• `!meme [timeframe]` - Generate a price chart meme
+  - Timeframes: 5m, 15m, 1hr
 • `!crash` - See how much LUX crashed
     """
     await ctx.send(help_text)
