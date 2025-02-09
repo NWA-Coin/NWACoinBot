@@ -11,36 +11,34 @@ logger = logging.getLogger('discord_bot')
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# Technical and code-focused fallback roasts
+# List of fallback roasts
 FALLBACK_ROASTS = [
     # Technical/Code Roasts
     "LUX code looking like a bootcamp dropout's first project! Complete disaster! 💩👨‍💻",
-    "Tino can't even code a proper rugpull! NWA exposing this fraud! 🔥🤡",
+    "Can't even code a proper rugpull! NWA exposing this fraud! 🔥🤡",
     "Another day of LUX smart contracts failing! Trash coder exposed! 🗑️💀",
-    "Stack Overflow won't save your shitcoin Tino! Complete failure! ⚰️👨‍💻",
-    "Error 404: Tino's coding skills not found! NWA stays winning! 🏆💯",
+    "Stack Overflow won't save your shitcoin! Complete failure! ⚰️👨‍💻",
+    "Error 404: Coding skills not found! NWA stays winning! 🏆💯",
     "Copy-pasting code won't save LUX! Another L for this fraud! 📝🗑️",
-    "Even ChatGPT writes better code than Tino! Complete failure! 🤖⚰️",
+    "Even ChatGPT writes better code! Complete failure! 🤖⚰️",
 
-    # Personal/Funny Roasts
-    "Tino malding while NWA keeps winning! Another day of pure humiliation! 🤡🖕",
-    "LUX chart looking like Tino's credibility - straight to zero! 📉💩",
-    "NWA raw dogging Tino's reputation while LUX dumps! Complete disaster! 🔥💀",
+    # Project/Price Roasts
+    "LUX chart looking like your credibility - straight to zero! 📉💩",
+    "NWA destroying your reputation while LUX dumps! Complete disaster! 🔥💀",
     "Even your trading bot dumped LUX! Get exposed fraud! 🤖🗑️",
-    "Tino begging ChatGPT to pump LUX! Pathetic scammer! 🤮💸",
-
-    # Pronouns/Identity Roasts
-    "They/Them got THEY ass exposed by NWA! Complete disaster! 🏳️‍🌈💀",
-    "THEY thought LUX would moon but THEIR bags went to zero! 🌈📉",
-    "They/Them can't even code THEIR way out of this rugpull! 🏳️‍🌈🤡",
-    "THEIR GitHub commits looking more dead than LUX price! 💻⚰️",
-    "They/Them getting exposed while NWA stays winning! 🌈🔥",
+    "Begging ChatGPT to pump LUX! Pathetic scammer! 🤮💸",
+    "Another day, another LUX rugpull! NWA stays winning! 🏆💰",
+    "Zero liquidity just like your trading skills! Complete failure! 💸📉",
+    "Imagine launching a token that only goes down! Pure comedy! 😂💩",
 
     # Mixed Content
-    "They/Them's code + zero liquidity = complete disaster! 🏳️‍🌈💩",
-    "Error in THEIR trading bot: exit_scam.py failed! 🤖📉",
-    "NWA exposing THEIR copy-pasted code! Another L! 🔥💻",
-    "They/Them can't debug THEIR way out of this one! 🌈🐛"
+    "Failed code + zero liquidity = complete disaster! 💩📉",
+    "Error in trading bot: exit_scam.py failed! 🤖📉",
+    "NWA exposing your copy-pasted code! Another L! 🔥💻",
+    "Can't debug your way out of this one! 💻🐛",
+    "Pushed to main and the price crashed again! Complete failure! 💩💻",
+    "From junior dev to complete failure! Stay losing! 🤡👨‍💻",
+    "Commit history: 100% copypasta! Pure garbage! 💩💻"
 ]
 
 async def get_crash_stats():
@@ -60,7 +58,7 @@ async def get_crash_stats():
         return None, None
 
 def generate_roast():
-    """Generate a savage roast with OpenAI, mixing technical, personal, and pronoun content."""
+    """Generate a savage roast focusing on technical and project failures."""
     try:
         logger.info("Starting roast generation")
 
@@ -68,7 +66,6 @@ def generate_roast():
         try:
             crash_percent, price_in_cents = asyncio.run(get_crash_stats())
         except RuntimeError:
-            # If running inside Discord's event loop, use a different approach
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             crash_percent, price_in_cents = loop.run_until_complete(get_crash_stats())
@@ -76,28 +73,36 @@ def generate_roast():
 
         # Generate roast based on crash stats
         try:
-            logger.info(f"Generating roast (attempt 1/3)")
+            logger.info(f"Generating roast with stats: {crash_percent:.1f}% down, {price_in_cents:.4f}¢")
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {
                         "role": "system",
                         "content": f"""You are a savage roast generator for the Nick White Army (NWA).
-                        Create diverse roasts about LUX cryptocurrency and Tino (who uses they/them pronouns).
+                        Create brutal roasts about LUX cryptocurrency focusing on technical and project failures.
                         Current stats: Down {crash_percent:.1f}%, price: {price_in_cents:.4f}¢
 
                         Mix these roasting styles randomly:
-                        1. Technical: Mock their incompetent programming and development failures
-                        2. Personal: Roast their trading failures and reputation
-                        3. Identity: Use they/them pronouns creatively in roasts (THEY/THEM in caps)
-                        4. Project: Mock LUX's technical disasters and price dumps
+                        1. Technical: Mock incompetent programming and development failures
+                           - Broken smart contracts and failed deployments
+                           - Copy-pasted code and amateur mistakes
+                           - Failed code reviews and buggy commits
+                        2. Project: Mock LUX's technical disasters and price dumps
+                           - Zero liquidity and price crashes
+                           - Failed tokenomics and contract bugs
+                           - Poor documentation and broken features
+                        3. Development: Focus on coding incompetence
+                           - Programming jokes and technical puns
+                           - Development failure humor
+                           - Project disaster mockery
 
-                        Keep roasts under 100 characters. Include emojis (💩,🤡,💻,⚰️,📉,🌈).
-                        Make each roast unique and savage, emphasizing NWA's dominance."""
+                        Keep roasts under 100 characters. Include emojis (💩,🤡,💻,⚰️,📉,🔥).
+                        Make each roast unique and brutal, emphasizing technical failures."""
                     },
                     {
                         "role": "user",
-                        "content": "Generate a savage NWA roast mixing technical failures, personal mockery, and they/them pronouns!"
+                        "content": "Generate a savage NWA roast about LUX's technical disasters and project failures!"
                     }
                 ],
                 max_tokens=50,
@@ -105,12 +110,14 @@ def generate_roast():
             )
 
             roast = response.choices[0].message.content.strip()
-            logger.info(f"Generated roast: {roast}")
+            logger.info(f"Generated OpenAI roast: {roast}")
             return roast
 
         except Exception as e:
             logger.error(f"Error generating roast with OpenAI: {str(e)}")
-            return random.choice(FALLBACK_ROASTS)
+            fallback = random.choice(FALLBACK_ROASTS)
+            logger.info(f"Using fallback roast: {fallback}")
+            return fallback
 
     except Exception as e:
         logger.error(f"Error in roast generation: {str(e)}")
