@@ -33,10 +33,8 @@ async def start_http_server():
     """Start a simple HTTP server for health checks."""
     try:
         app = web.Application()
-
         async def health_check(request):
             return web.Response(text="Bot is running")
-
         app.router.add_get('/', health_check)
         runner = web.AppRunner(app)
         await runner.setup()
@@ -54,12 +52,12 @@ async def on_ready():
         logger.info(f'Bot ID: {bot.user.id}')
         logger.info('Bot is ready!')
 
-        # Start HTTP server for health checks after bot is ready
-        bot.loop.create_task(start_http_server())
-
         # Print invite link
         logger.info('\nInvite link:')
         logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
+
+        # Start HTTP server for health checks after bot is ready
+        await start_http_server()
     except Exception as e:
         logger.error(f"Error in on_ready: {str(e)}")
 
