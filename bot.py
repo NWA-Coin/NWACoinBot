@@ -54,30 +54,37 @@ async def roast_lux(ctx):
         # Combine built-in and custom roasts
         all_roasts = list(CUSTOM_ROASTS) + [generate_roast()]
         roast = random.choice(all_roasts)
-        await ctx.send(f"🔥 {roast}")
+        # Add random fire and skull emojis
+        fire_emojis = ['🔥', '💥', '🌋']
+        skull_emojis = ['💀', '☠️', '👻']
+        start_emoji = random.choice(fire_emojis)
+        end_emoji = random.choice(skull_emojis)
+        await ctx.send(f"{start_emoji} {roast} {end_emoji}")
     except Exception as e:
         print(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Oops! Something went wrong. Please try again later!")
 
 @bot.command(name='memeroast')
 async def meme_roast_lux(ctx):
-    """Send a random roast about Lux coin as a meme image."""
+    """Generate a meme image with a roast."""
     try:
-        # Combine built-in and custom roasts
-        all_roasts = list(CUSTOM_ROASTS) + [generate_roast()]
-        roast = random.choice(all_roasts)
+        # Get a random roast
+        roast = random.choice(list(CUSTOM_ROASTS) + [generate_roast()])
 
-        # Generate meme image
-        meme_bytes = create_meme_image(roast)
+        # Add fire and skull emojis
+        fire_emojis = ['🔥', '💥', '🌋']
+        skull_emojis = ['💀', '☠️', '👻']
+        decorated_roast = f"{random.choice(fire_emojis)} {roast} {random.choice(skull_emojis)}"
 
-        # Send the meme
-        await ctx.send(
-            file=discord.File(fp=meme_bytes, filename='lux_roast.png'),
-            content=f"🔥 Generated a spicy meme roast for you!"
-        )
+        # Generate and send meme image
+        async with ctx.typing():
+            meme_bytes = create_meme_image(decorated_roast)
+            await ctx.send(
+                file=discord.File(fp=meme_bytes, filename='roast.png')
+            )
     except Exception as e:
         print(f"Error in memeroast command: {str(e)}")
-        await ctx.send("❌ Failed to generate meme roast. Please try again!")
+        await ctx.send("❌ Failed to generate meme. Please try again!")
 
 @bot.command(name='addroast')
 async def add_custom_roast(ctx, *, roast_text: str):

@@ -3,8 +3,11 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 import requests
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+import emoji
 
-# Predefined roast templates
+# Roast templates remain unchanged
 ROAST_TEMPLATES = [
     "Lux coin is so slow, Internet Explorer feels fast in comparison! 🐌",
     "Lux's market cap is like my dating life - constantly disappointing! 📉",
@@ -25,12 +28,7 @@ ROAST_TEMPLATES = [
     "$LUX team promises updates slower than George R.R. Martin writes books! 📚",
     "$LUX token is more useless than a screen door on a submarine! 🚢",
     "$LUX's market analysis looks like a toddler's crayon masterpiece! 🖍️",
-    "$LUX devs must be using carrier pigeons for communication! 🐦",
-    "$LUX's smart contracts are dumber than a bag of rocks! 🪨",
-    "$LUX holders need more copium than a failed NFT project! 🎨",
-    "$LUX's security is about as robust as a chocolate teapot! ☕",
-    "$LUX chart resembles my EKG after seeing my portfolio! 💀",
-    "$LUX staking rewards are smaller than an ant's lunch! 🐜"
+    "$LUX devs must be using carrier pigeons for communication! 🐦"
 ]
 
 def generate_roast():
@@ -38,228 +36,214 @@ def generate_roast():
     return random.choice(ROAST_TEMPLATES)
 
 def get_lux_price_data():
-    """Fetch live $LUX token data and 7-day historical data."""
+    """Fetch live $LUX token data with retries."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
     try:
-        # Get current price data
+        # Get current price with 24h change
         current_url = "https://api.coingecko.com/api/v3/simple/price"
-        current_params = {
+        params = {
             "ids": "luxor",
             "vs_currencies": "usd",
-            "include_24hr_change": "true"
+            "include_24hr_change": "true",
+            "include_24hr_vol": "true",
+            "include_last_updated_at": "true"
         }
-        current_response = requests.get(current_url, params=current_params, timeout=10)
-        current_data = current_response.json()
 
-        # Get 7-day historical data
-        history_url = "https://api.coingecko.com/api/v3/coins/luxor/market_chart"
+        response = requests.get(current_url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            print(f"Error fetching price: {response.status_code}")
+            return None
+
+        data = response.json()
+
+        if "luxor" not in data:
+            print("No Luxor data in response")
+            return None
+
+        lux_data = data["luxor"]
+        current_price = lux_data.get("usd", 0)
+        price_change = lux_data.get("usd_24h_change", 0)
+        volume = lux_data.get("usd_24h_vol", 0)
+
+        # Get historical data for chart
+        history_url = f"https://api.coingecko.com/api/v3/coins/luxor/market_chart"
         history_params = {
             "vs_currency": "usd",
             "days": "7",
-            "interval": "daily"
+            "interval": "hourly"
         }
-        history_response = requests.get(history_url, params=history_params, timeout=10)
+
+        history_response = requests.get(history_url, params=history_params, headers=headers, timeout=10)
+        if history_response.status_code != 200:
+            print(f"Error fetching history: {history_response.status_code}")
+            return None
+
         history_data = history_response.json()
 
-        if "luxor" in current_data and "prices" in history_data:
-            current_price = current_data["luxor"]["usd"]
-            price_points = [p for p in history_data["prices"] if p[1] > 0]  # Filter out invalid prices
+        if "prices" not in history_data:
+            print("No price history in response")
+            return None
 
-            if not price_points:  # If no valid prices found
-                return None
+        # Process and filter price history
+        price_history = []
+        for timestamp, price in history_data["prices"]:
+            if price > 0:  # Filter out zero prices
+                dt = datetime.fromtimestamp(timestamp/1000)
+                price_history.append((dt, price))
 
-            # Calculate percentage change
-            start_price = price_points[0][1]
-            if start_price == 0:  # Avoid division by zero
-                change_7d = 0
-            else:
-                change_7d = ((current_price - start_price) / start_price) * 100
+        if not price_history:
+            print("No valid price history points")
+            return None
 
-            return {
-                "price": current_price,
-                "price_str": f"${current_price:.8f}" if current_price < 0.01 else f"${current_price:.6f}",
-                "change_7d": change_7d,
-                "change_str": f" (7d: {change_7d:+.1f}%)",
-                "history": price_points
-            }
-        return None
+        return {
+            "current_price": current_price,
+            "price_change": price_change,
+            "volume": volume,
+            "price_str": f"${current_price:.8f}" if current_price < 0.01 else f"${current_price:.4f}",
+            "change_str": f"{price_change:+.2f}%" if price_change else "N/A",
+            "volume_str": f"${volume:,.2f}" if volume else "N/A",
+            "history": price_history,
+            "last_updated": datetime.fromtimestamp(lux_data.get("last_updated_at", 0))
+        }
+
     except Exception as e:
-        print(f"Error fetching price: {str(e)}")
+        print(f"Error fetching price data: {str(e)}")
         return None
 
 def create_meme_image(text):
-    """Create a meme image with the given text and live $LUX data."""
+    """Create a meme image with the given text and price chart."""
     width = 1200
     height = 800
-    image = Image.new('RGB', (width, height), color='#1a1a1a')
-    draw = ImageDraw.Draw(image)
 
-    # Draw subtle grid
-    for i in range(0, width, 50):
-        draw.line([(i, 0), (i, height)], fill='#222222', width=1)
-    for i in range(0, height, 50):
-        draw.line([(0, i), (width, i)], fill='#222222', width=1)
-
-    # Get price data
-    price_data = get_lux_price_data()
-
-    if price_data and price_data.get("history"):
-        # Get min and max prices for scaling
-        prices = [point[1] for point in price_data["history"]]
-        min_price = min(prices)
-        max_price = max(prices)
-
-        if min_price == max_price:  # Handle flat price line
-            min_price *= 0.99
-            max_price *= 1.01
-
-        price_range = max_price - min_price
-
-        # Add padding to price range
-        padding = price_range * 0.1
-        min_price -= padding
-        max_price += padding
-        price_range = max_price - min_price
-
-        # Setup chart area
-        chart_area = {
-            'left': width * 0.15,    # Increased left margin
-            'right': width * 0.85,   # Decreased right margin
-            'top': height * 0.2,
-            'bottom': height * 0.6   # Reduced bottom to make room for text
-        }
-
-        chart_width = chart_area['right'] - chart_area['left']
-        chart_height = chart_area['bottom'] - chart_area['top']
-
-        # Draw price labels on Y-axis
-        price_steps = 5
-        for i in range(price_steps + 1):
-            price = min_price + (price_range * (i / price_steps))
-            y = chart_area['bottom'] - (i / price_steps) * chart_height
-            price_label = f"${price:.8f}" if price < 0.01 else f"${price:.6f}"
-
-            # Draw dotted line
-            dash_length = 5
-            x = chart_area['left']
-            while x < chart_area['right']:
-                draw.line([(x, y), (x + dash_length, y)], fill='#333333', width=1)
-                x += dash_length * 2
-
-            # Draw price label
-            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
-            label_bbox = draw.textbbox((0, 0), price_label, font=label_font)
-            label_width = label_bbox[2] - label_bbox[0]
-            draw.text((chart_area['left'] - label_width - 10, y - 6), 
-                     price_label, font=label_font, fill='#888888')
-
-        # Plot data points
-        points = []
-        history = price_data["history"]
-        for i, (timestamp, price) in enumerate(history):
-            x = chart_area['left'] + (i / (len(history) - 1)) * chart_width
-            y = chart_area['bottom'] - ((price - min_price) / price_range) * chart_height
-            points.append((x, y))
-
-            # Draw point
-            circle_radius = 4
-            draw.ellipse([(x - circle_radius - 1, y - circle_radius - 1),
-                         (x + circle_radius + 1, y + circle_radius + 1)],
-                        fill='white')
-            draw.ellipse([(x - circle_radius, y - circle_radius),
-                         (x + circle_radius, y + circle_radius)],
-                        fill='#ff4444')
-
-            # Draw price label above point
-            price_label = f"${price:.8f}" if price < 0.01 else f"${price:.6f}"
-            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
-            label_bbox = draw.textbbox((0, 0), price_label, font=label_font)
-            label_width = label_bbox[2] - label_bbox[0]
-            label_x = x - label_width/2
-            label_y = y - 20
-
-            draw.text((label_x, label_y), price_label, font=label_font, fill='#888888')
-
-        # Draw lines between points
-        if len(points) > 1:
-            draw.line(points, fill='#ff4444', width=2)
-
-        # Draw X-axis labels (dates)
-        for i, (timestamp, _) in enumerate(history):
-            x = chart_area['left'] + (i / (len(history) - 1)) * chart_width
-            label = "Now" if i == len(history) - 1 else f"{len(history) - 1 - i}d"
-
-            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
-            label_bbox = draw.textbbox((0, 0), label, font=label_font)
-            label_width = label_bbox[2] - label_bbox[0]
-            label_x = x - label_width/2
-            label_y = chart_area['bottom'] + 10
-
-            draw.text((label_x, label_y), label, font=label_font, fill='#888888')
-
-    else:
-        # Draw "No Data Available" message
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-        message = "Price data unavailable"
-        bbox = draw.textbbox((0, 0), message, font=font)
-        message_width = bbox[2] - bbox[0]
-        x = (width - message_width) // 2
-        y = height // 2
-        draw.text((x, y), message, font=font, fill='#ff4444')
-
-    # Draw header with current price
     try:
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-    except:
-        title_font = ImageFont.load_default()
+        # Create base image
+        image = Image.new('RGB', (width, height), color='#1a1a1a')
+        draw = ImageDraw.Draw(image)
 
-    if price_data:
-        price_text = f"$LUX: {price_data['price_str']}{price_data['change_str']}"
-    else:
-        price_text = "$LUX: Price Unavailable 📉"
+        # Get price data
+        price_data = get_lux_price_data()
 
-    bbox = draw.textbbox((0, 0), price_text, font=title_font)
-    text_width = bbox[2] - bbox[0]
-    x = (width - text_width) // 2
-    y = 40
-    draw.text((x, y), price_text, font=title_font, fill='#ff4444')
+        if price_data and price_data["history"]:
+            # Set up matplotlib for chart
+            plt.clf()
+            plt.style.use('dark_background')
+            fig, ax = plt.subplots(figsize=(10, 4))
+            fig.patch.set_facecolor('#1a1a1a')
+            ax.set_facecolor('#1a1a1a')
 
-    # Draw roast text at the bottom
-    words = text.split()
-    lines = []
-    current_line = []
-    max_line_length = 50
+            # Extract data for plotting
+            dates = [point[0] for point in price_data["history"]]
+            prices = [point[1] for point in price_data["history"]]
 
-    for word in words:
-        current_line.append(word)
-        if len(' '.join(current_line)) > max_line_length:
-            if len(current_line) > 1:
-                lines.append(' '.join(current_line[:-1]))
-                current_line = [word]
-            else:
-                lines.append(word)
-                current_line = []
+            # Create the main price line
+            ax.plot(dates, prices, color='#ff4444', linewidth=2, label='Price')
 
-    if current_line:
-        lines.append(' '.join(current_line))
+            # Add gradient fill
+            ax.fill_between(dates, prices, min(prices), color='#ff4444', alpha=0.1)
 
-    # Draw text with semi-transparent background
-    text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
-    text_start_y = height - (len(lines) * 40) - 40
-    text_box_height = len(lines) * 40 + 40
-    text_box = Image.new('RGBA', (width, text_box_height), (0, 0, 0, 180))
-    image.paste(text_box, (0, text_start_y - 20), text_box)
+            # Customize grid and ticks
+            ax.grid(True, color='#333333', linestyle='--', alpha=0.3)
+            ax.tick_params(axis='both', colors='#888888', labelsize=8)
 
-    # Draw each line of text
-    y = text_start_y
-    for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=text_font)
-        line_width = bbox[2] - bbox[0]
-        x = (width - line_width) // 2
-        draw.text((x, y), line, font=text_font, fill='white')
-        y += 40
+            # Format axes
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(
+                lambda x, p: f'${x:.8f}' if x < 0.01 else f'${x:.4f}'
+            ))
+            ax.xaxis.set_major_formatter(plt.DateFormatter('%b %d %H:%M'))
+            plt.xticks(rotation=45)
 
-    # Convert to bytes
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
-    return img_byte_arr
+            # Add title with last updated time
+            update_time = price_data["last_updated"].strftime("%Y-%m-%d %H:%M UTC")
+            plt.title(f"$LUX Price Chart (Updated: {update_time})", 
+                     color='#888888', pad=10, fontsize=10)
+
+            # Save chart to bytes
+            chart_bytes = io.BytesIO()
+            plt.savefig(chart_bytes, format='png', dpi=100, bbox_inches='tight',
+                       facecolor='#1a1a1a', edgecolor='none')
+            plt.close()
+
+            # Add chart to image
+            chart_bytes.seek(0)
+            chart_img = Image.open(chart_bytes)
+            chart_img = chart_img.resize((width - 100, 300), Image.Resampling.LANCZOS)
+            image.paste(chart_img, (50, 150))
+
+        # Add price and stats at the top
+        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+
+        if price_data:
+            stats = f"$LUX: {price_data['price_str']} ({price_data['change_str']}) | Vol: {price_data['volume_str']}"
+        else:
+            stats = "$LUX: Price Unavailable 📉"
+
+        # Convert emojis in text
+        stats = emoji.emojize(stats, language='alias')
+        text = emoji.emojize(text, language='alias')
+
+        # Draw stats
+        bbox = draw.textbbox((0, 0), stats, font=title_font)
+        x = (width - (bbox[2] - bbox[0])) // 2
+        draw.text((x, 50), stats, font=title_font, fill='#ff4444')
+
+        # Draw roast text at bottom
+        text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)
+
+        # Split text into lines
+        words = text.split()
+        lines = []
+        current_line = []
+        max_width = width - 200
+
+        for word in words:
+            current_line.append(word)
+            line = ' '.join(current_line)
+            bbox = draw.textbbox((0, 0), line, font=text_font)
+            if bbox[2] - bbox[0] > max_width:
+                if len(current_line) > 1:
+                    lines.append(' '.join(current_line[:-1]))
+                    current_line = [word]
+                else:
+                    lines.append(word)
+                    current_line = []
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Draw text
+        y = 500  # Start below chart
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=text_font)
+            x = (width - (bbox[2] - bbox[0])) // 2
+            draw.text((x, y), line, font=text_font, fill='white')
+            y += 60
+
+        # Convert to bytes
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+        return img_byte_arr
+
+    except Exception as e:
+        print(f"Error creating meme image: {str(e)}")
+        # Create error image
+        error_image = Image.new('RGB', (width, height), color='#1a1a1a')
+        draw = ImageDraw.Draw(error_image)
+        error_text = "Failed to generate meme 😢"
+        try:
+            error_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)
+        except:
+            error_font = ImageFont.load_default()
+
+        bbox = draw.textbbox((0, 0), error_text, font=error_font)
+        x = (width - (bbox[2] - bbox[0])) // 2
+        y = height // 2
+        draw.text((x, y), error_text, font=error_font, fill='#ff4444')
+
+        error_bytes = io.BytesIO()
+        error_image.save(error_bytes, format='PNG')
+        error_bytes.seek(0)
+        return error_bytes
