@@ -18,11 +18,11 @@ async def get_crash_stats():
     """Get crash stats for roast."""
     try:
         logger.info("Starting crash stats calculation")
-        dates, prices, _ = await get_lux_price_history()  # Correctly unpack three values
-        if dates and prices:
+        timestamps, prices = await get_lux_price_history()
+        if timestamps and prices:
             current_price = prices[-1]
             crash_percent = ((0.015 - current_price) / 0.015) * 100
-            price_str = format_price_label(current_price)  # Use consistent price formatting
+            price_str = format_price_label(current_price)
             logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_str}")
             return crash_percent, price_str
         logger.warning("No price data available for crash stats")
@@ -35,9 +35,9 @@ async def get_crash_stats():
 async def generate_meme(timeframe="1hr"):
     """Generate a price chart meme with savage roast overlay."""
     try:
-        logger.info("Starting price chart meme generation")
+        logger.info(f"Starting meme generation with timeframe {timeframe}")
 
-        # Generate candlestick chart
+        # Generate price chart
         logger.info(f"Calling create_price_chart with timeframe {timeframe}")
         chart_path = await create_price_chart(timeframe)
         logger.info(f"Received chart path: {chart_path}")
@@ -46,12 +46,12 @@ async def generate_meme(timeframe="1hr"):
             logger.error("Failed to generate chart")
             raise Exception("Chart generation failed")
 
-        # Verify chart was created and has content
+        # Verify chart exists and has content
         if not os.path.exists(chart_path) or os.path.getsize(chart_path) == 0:
             logger.error(f"Chart file verification failed: exists={os.path.exists(chart_path)}, size={os.path.getsize(chart_path) if os.path.exists(chart_path) else 0}")
             raise Exception("Chart creation failed or file is empty")
 
-        # Load chart and add text overlay
+        # Add text overlay
         logger.info("Adding text overlay to chart")
         try:
             img = Image.open(chart_path)
@@ -70,7 +70,7 @@ async def generate_meme(timeframe="1hr"):
             crash_percent, price_str = await get_crash_stats()
             logger.info(f"Received crash stats: {crash_percent}%, {price_str}")
 
-            # Generate appropriate roast based on crash percentage
+            # Generate roast based on crash percentage
             if crash_percent is not None and price_str is not None:
                 if crash_percent >= 90:
                     roast = f"DOWN {crash_percent:.1f}%! ({price_str}) COMPLETE RUGPULL"
@@ -83,11 +83,11 @@ async def generate_meme(timeframe="1hr"):
             else:
                 roast = "LUX IS DEAD! COMPLETE RUGPULL"
 
-            # Add text with outline - positioned at the top
+            # Add text with outline at the top
             text_color = 'white'
             outline_color = 'black'
             outline_width = 2
-            text_pos = (20, 10)  # Y coordinate at 10 for top positioning
+            text_pos = (20, 10)
 
             logger.info(f"Adding text overlay: {roast}")
             # Draw outline
@@ -100,13 +100,13 @@ async def generate_meme(timeframe="1hr"):
             # Draw main text
             draw.text(text_pos, roast, font=font, fill=text_color)
 
-            # Save final meme
+            # Save final meme with high quality
             final_path = f"price_meme_{int(datetime.now().timestamp())}.png"
             logger.info(f"Saving final meme to: {final_path}")
             img.save(final_path, quality=95)
             logger.info(f"Successfully saved final meme: {final_path}")
 
-            # Clean up chart
+            # Clean up the temporary chart file
             try:
                 os.remove(chart_path)
                 logger.info(f"Cleaned up chart: {chart_path}")

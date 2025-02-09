@@ -20,53 +20,40 @@ async def get_lux_price_history(timeframe="1hr"):
         if timestamps and prices:
             logger.info(f"Successfully retrieved {len(prices)} price points")
             logger.info(f"Latest price: ${prices[-1]:.6f}")
-            return timestamps, prices, _  # Return all values to maintain consistency
+            return timestamps, prices
 
         logger.warning("Failed to fetch price data")
-        return None, None, None
+        return None, None
     except Exception as e:
         logger.error(f"Error in price history retrieval: {str(e)}")
-        return None, None, None
+        return None, None
 
 def format_price_label(price):
-    """Format price in cents with consistent decimal places."""
+    """Format price in cents."""
     cents = price * 100
     return f"{cents:.1f}¢"
 
-def format_time_label(timestamp, timeframe):
-    """Format time label based on timeframe with consistent spacing."""
+def format_time_label(timestamp):
+    """Simple time label format."""
     try:
-        utc_dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
-        eastern_dt = utc_dt.astimezone(eastern)
-        logger.info(f"Formatting time label for timestamp {timestamp} in {timeframe} timeframe")
-
-        if timeframe == "5m":
-            # For 5m, show HH:MM with consistent spacing
-            return eastern_dt.strftime("%H:%M")
-        elif timeframe == "15m":
-            # For 15m, show HH:MM with consistent spacing
-            return eastern_dt.strftime("%H:%M")
-        else:  # 1hr
-            # For hourly view, show MM/DD HH:MM if spanning multiple days
-            curr_day = datetime.now(eastern).strftime("%d")
-            if eastern_dt.strftime("%d") != curr_day:
-                return eastern_dt.strftime("%m/%d\n%H:%M")
-            return eastern_dt.strftime("%H:%M")
+        dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
+        eastern_time = dt.astimezone(eastern)
+        return eastern_time.strftime("%H:%M")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
-        return "N/A"  # Fallback label
+        return "N/A"
 
 async def create_price_chart(timeframe="1hr"):
     """Create a simple line chart showing price movement."""
     try:
         # Get price data
         logger.info(f"Starting price chart generation for timeframe {timeframe}")
-        timestamps, prices, _ = await fetch_lux_market_data(timeframe)
+        timestamps, prices = await get_lux_price_history(timeframe)
         if not timestamps or not prices:
             logger.error("Failed to get price data")
             return None
 
-        # Chart dimensions and padding
+        # Chart dimensions
         width = 1280
         height = 720
         padding = 70  # Increased padding for better label spacing
@@ -80,11 +67,11 @@ async def create_price_chart(timeframe="1hr"):
         chart_height = height - (2 * padding)
 
         # Calculate price range with padding
-        max_price = max(prices) * 1.02
-        min_price = min(prices) * 0.98
+        max_price = max(prices) * 1.02  # Add 2% padding
+        min_price = min(prices) * 0.98  # Add 2% padding
         price_range = max_price - min_price
 
-        # Load font with increased size
+        # Load font with increased size for better readability
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
             logger.info("Loaded custom font successfully")
@@ -97,62 +84,46 @@ async def create_price_chart(timeframe="1hr"):
         label_color = '#FFFFFF'
         line_color = '#FF4444'  # Red line for price dumps
 
-        # Draw horizontal grid lines and price labels with consistent spacing
-        num_price_lines = 6
-        for i in range(num_price_lines):
-            price = min_price + (i * (price_range / (num_price_lines - 1)))
-            y = height - padding - ((price - min_price) * chart_height / price_range)
+        # Draw horizontal grid lines and price labels
+        for i in range(6):
+            price = min_price + (i * (price_range / 5))
+            y = padding + ((max_price - price) * chart_height / price_range)
 
-            # Draw grid line
+            # Grid line
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
 
-            # Draw price label
+            # Price label
             price_str = format_price_label(price)
-            label_width = draw.textlength(price_str, font=font)
-            draw.text((padding - label_width - 10, y - 16), price_str, fill=label_color, font=font)
+            draw.text((10, y - 12), price_str, fill=label_color, font=font)
 
-        # Draw time labels and vertical grid lines with consistent spacing
-        time_interval = (timestamps[-1] - timestamps[0]) / 5  # Divide into 5 segments
-        for i in range(6):  # 6 points for 5 segments
-            x_pos = padding + (i * chart_width / 5)
-            timestamp = timestamps[0] + (i * time_interval)
+        # Draw time labels and vertical grid lines
+        num_labels = 6
+        for i in range(num_labels):
+            x = padding + (i * chart_width / (num_labels - 1))
+            timestamp = timestamps[0] + (i * (timestamps[-1] - timestamps[0]) / (num_labels - 1))
 
-            # Draw vertical grid line
-            draw.line([(x_pos, padding), (x_pos, height - padding)], fill=grid_color, width=1)
+            # Grid line
+            draw.line([(x, padding), (x, height - padding)], fill=grid_color)
 
-            # Format and draw time label
-            time_str = format_time_label(int(timestamp), timeframe)
-            label_width = draw.textlength(time_str, font=font)
-            draw.text((x_pos - label_width/2, height - padding + 10), 
-                     time_str, fill=label_color, font=font)
+            # Time label
+            time_str = format_time_label(timestamp)
+            draw.text((x - 20, height - padding + 10), time_str, fill=label_color, font=font)
 
         # Draw price line with increased thickness
         points = []
         for timestamp, price in zip(timestamps, prices):
             x = padding + ((timestamp - timestamps[0]) * chart_width / (timestamps[-1] - timestamps[0]))
-            y = height - padding - ((price - min_price) * chart_height / price_range)
+            y = padding + ((max_price - price) * chart_height / price_range)
             points.append((x, y))
 
         if len(points) > 1:
-            draw.line(points, fill=line_color, width=3)
+            draw.line(points, fill=line_color, width=3)  # Increased line width
 
-        # Save chart with unique timestamp
+        # Save chart with high quality
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"
-
-        try:
-            img.save(chart_path, quality=95)
-            logger.info(f"Successfully saved chart: {chart_path}")
-
-            # Verify file was created successfully
-            if os.path.exists(chart_path) and os.path.getsize(chart_path) > 0:
-                return chart_path
-            else:
-                logger.error("Chart file was not created successfully")
-                return None
-
-        except Exception as e:
-            logger.error(f"Error saving chart file: {str(e)}")
-            return None
+        img.save(chart_path, quality=95)
+        logger.info(f"Successfully saved chart: {chart_path}")
+        return chart_path
 
     except Exception as e:
         logger.error(f"Error creating chart: {str(e)}")
