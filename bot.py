@@ -6,6 +6,8 @@ from price_chart import generate_price_chart
 from roast_generator import generate_roast
 import asyncio
 import logging
+from aiohttp import web
+import threading
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -30,12 +32,29 @@ def commands_ready():
         if current_time - timestamp > 3:  # 3 second cooldown
             del command_cooldowns[cmd]
 
+async def start_http_server():
+    """Start a simple HTTP server for health checks."""
+    app = web.Application()
+
+    async def health_check(request):
+        return web.Response(text="Bot is running")
+
+    app.router.add_get('/', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 5000)
+    await site.start()
+    logger.info("HTTP server started on port 5000")
+
 @bot.event
 async def on_ready():
     """Called when the bot is ready."""
     logger.info(f'Logged in as {bot.user.name}')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
+
+    # Start HTTP server for health checks
+    await start_http_server()
 
     # Print invite link
     logger.info('\nInvite link:')

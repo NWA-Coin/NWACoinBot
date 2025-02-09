@@ -556,6 +556,7 @@ name = "lux-roast-bot"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "anthropic" },
     { name = "discord-py" },
     { name = "emoji" },
@@ -571,6 +572,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.11.12" },
     { name = "anthropic", specifier = ">=0.45.2" },
     { name = "discord-py", specifier = ">=2.4.0" },
     { name = "emoji", specifier = ">=2.14.1" },
