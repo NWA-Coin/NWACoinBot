@@ -18,13 +18,13 @@ async def get_crash_stats():
     """Get crash stats for roast."""
     try:
         logger.info("Starting crash stats calculation")
-        dates, prices = await get_lux_price_history()
+        dates, prices, _ = await get_lux_price_history()  # Correctly unpack three values
         if dates and prices:
             entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
             crash_percent = ((entry_price - current_price) / entry_price) * 100
             price_in_cents = current_price * 100
-            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
+            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.2f}¢")
             return crash_percent, price_in_cents
         logger.warning("No price data available for crash stats")
         return None, None
@@ -73,13 +73,13 @@ async def generate_meme():
 
             if crash_percent is not None and price_in_cents is not None:
                 if crash_percent >= 90:
-                    roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.4f}¢) COMPLETE RUGPULL! 💀"
+                    roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.2f}¢) COMPLETE RUGPULL! 💀"
                 elif crash_percent >= 70:
-                    roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.4f}¢) TINO IN SHAMBLES! 🖕"
+                    roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO IN SHAMBLES! 🖕"
                 elif crash_percent >= 50:
-                    roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.4f}¢) NWA WINS AGAIN! 🔥"
+                    roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) NWA WINS AGAIN! 🔥"
                 else:
-                    roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.4f}¢) TINO'S REPUTATION! 💸"
+                    roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO'S REPUTATION! 💸"
             else:
                 roast = "LUX IS DEAD! COMPLETE RUGPULL! 💀"
 

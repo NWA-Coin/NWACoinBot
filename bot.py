@@ -141,13 +141,13 @@ async def crash(ctx):
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
-                f"Current Price: {price_in_cents:.4f}¢\n"  # Show cents
-                f"Entry Price: 1.5¢\n"  # Added for reference
+                f"Current Price: {price_in_cents:.2f}¢\n"  # Updated to 2 decimal places
+                f"Entry Price: 1.50¢\n"  # Updated formatting
                 f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
             )
 
             await ctx.send(crash_message)
-            logger.info(f"Sent crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
+            logger.info(f"Sent crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.2f}¢")
         else:
             await ctx.send("💥 LUX CRASH UPDATE 💥\nPrice too low to calculate! Complete rugpull! 💀")
             logger.warning("Using fallback crash message due to missing price data")

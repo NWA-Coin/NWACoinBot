@@ -14,6 +14,7 @@ async def get_lux_price_history():
     """Get LUX price history from API with 30-minute candles."""
     max_retries = 3
     retry_delay = 2
+    last_error = None  # Initialize last_error
 
     for attempt in range(max_retries):
         try:
@@ -36,27 +37,26 @@ async def get_lux_price_history():
                         if response.status == 200:
                             data = await response.json()
                             if 'prices' in data:
-                                # Extract timestamps and prices for !crash command
                                 dates = [p[0] for p in data['prices']]
                                 prices = [p[1] for p in data['prices']]
 
-                                # Group into 30-minute candles for chart
+                                # Create candles from price data
                                 candles = []
-                                for i in range(0, len(prices), 2):  # 2 price points per hour
-                                    chunk = prices[i:i+2]
-                                    if chunk:
+                                for i in range(0, len(prices), 2):
+                                    chunk_prices = prices[i:i+2]
+                                    if chunk_prices:
                                         candle = {
                                             'timestamp': dates[i],
-                                            'open': chunk[0],
-                                            'high': max(chunk),
-                                            'low': min(chunk),
-                                            'close': chunk[-1]
+                                            'open': chunk_prices[0],
+                                            'high': max(chunk_prices),
+                                            'low': min(chunk_prices),
+                                            'close': chunk_prices[-1]
                                         }
                                         candles.append(candle)
 
-                                if candles:
-                                    logger.info(f"Successfully fetched price data from {token_id}")
-                                    return dates, prices, candles  # Return all formats
+                                logger.info(f"Successfully fetched price data. Latest price: ${prices[-1]:.6f}")
+                                return dates, prices, candles
+
             except Exception as e:
                 last_error = e
                 logger.warning(f"Failed to fetch data: {str(e)}")
@@ -69,6 +69,7 @@ async def get_lux_price_history():
             return await generate_mock_data()
 
         except Exception as e:
+            last_error = e
             logger.error(f"Error in get_lux_price_history: {str(e)}")
             logger.exception("Full traceback:")
             if attempt < max_retries - 1:
@@ -76,7 +77,7 @@ async def get_lux_price_history():
                 continue
             return await generate_mock_data()
 
-    logger.error("All attempts failed")
+    logger.error(f"All attempts failed. Last error: {str(last_error)}")
     return await generate_mock_data()
 
 async def generate_mock_data():
@@ -84,8 +85,14 @@ async def generate_mock_data():
     try:
         logger.warning("Using mock price data")
         periods = 336  # 7 days of 30-minute candles
-        entry_price = 0.015  # NWA entry price
+        entry_price = 0.015  # NWA entry price in USD (1.5 cents)
         current_price = 0.0037  # Current LUX price in USD (0.37 cents)
+
+        # Calculate and log crash percentage for verification
+        crash_percent = ((entry_price - current_price) / entry_price) * 100
+        price_in_cents = current_price * 100
+        logger.info(f"Mock data price stats: Entry=${entry_price:.4f} (1.50¢), Current=${current_price:.4f} (0.37¢)")
+        logger.info(f"Crash percentage: Down {crash_percent:.1f}% from entry")
 
         dates = []
         prices = []
@@ -209,12 +216,12 @@ async def create_price_chart():
             draw.rectangle((x, body_top, x + candle_width, body_bottom), fill=color, outline=color)
 
         # Add title and crash percentage
-        entry_price = 0.015  # NWA entry price
-        current_price = candles[-1]['close']
+        entry_price = 0.015  # NWA entry price in USD (1.5 cents)
+        current_price = 0.0037  # Current LUX price in USD (0.37 cents)
         crash_percent = ((entry_price - current_price) / entry_price) * 100
         price_in_cents = current_price * 100
 
-        title = f"LUX 30m Chart | Down {crash_percent:.1f}% | Current: {price_in_cents:.4f}¢"
+        title = f"LUX 30m Chart | Down {crash_percent:.2f}% | Current: {price_in_cents:.2f}¢"
         draw.text((width//2 - 250, 20), title, fill='white', font=font)
 
         # Save chart
