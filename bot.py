@@ -181,7 +181,7 @@ async def meme(ctx, timeframe: str = "1hr"):
             return
 
         logger.info(f"Starting meme generation with timeframe {timeframe}")
-        await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
+        message = await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
 
         logger.info("Calling generate_meme function...")
         meme_path = await generate_meme(timeframe)
@@ -197,7 +197,7 @@ async def meme(ctx, timeframe: str = "1hr"):
                 logger.info("Successfully sent meme file")
             except Exception as e:
                 logger.error(f"Error sending meme file: {str(e)}")
-                await ctx.send("Failed to send meme! Error occurred while sending file.")
+                await message.edit(content="Failed to send meme! Error occurred while sending file.")
                 return
 
             # Clean up the file
@@ -209,7 +209,7 @@ async def meme(ctx, timeframe: str = "1hr"):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            await ctx.send("Failed to generate chart! LUX price data not found! 📉")
+            await message.edit(content="Failed to generate chart! LUX price data not found! 📉")
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")

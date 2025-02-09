@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pytz
-import math  # Added for floor/ceil functions
+import math
+from market_data import fetch_lux_market_data
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -12,37 +13,65 @@ logger = logging.getLogger('discord_bot')
 # Define Eastern timezone
 eastern = pytz.timezone('US/Eastern')
 
+# Add NWA entry price as a configurable constant
+NWA_ENTRY_PRICE = 0.015  # 1.5 cents entry price
+
 async def get_lux_price_history(timeframe="1hr"):
     """Get LUX price history with specified timeframe."""
     try:
-        logger.info(f"Fetching LUX price data for timeframe {timeframe}")
+        logger.info(f"Fetching live LUX price data for timeframe {timeframe}")
 
-        # Set consistent seeds for reproducibility - change every 5 minutes
+        # Try to fetch live market data first
+        timestamps, prices, candles = await fetch_lux_market_data(timeframe)
+
+        if timestamps and prices and candles:
+            logger.info("Successfully retrieved live market data")
+            if await validate_price_data(timestamps, prices, candles):
+                return timestamps, prices, candles
+            else:
+                logger.error("Live market data validation failed. Falling back to simulation.")
+                return await generate_simulated_price_history(timeframe)
+        else:
+            # Fall back to simulated data if live data fails
+            logger.warning("Failed to fetch live data, falling back to simulation")
+            return await generate_simulated_price_history(timeframe)
+
+    except Exception as e:
+        logger.error(f"Error in price history retrieval: {str(e)}")
+        logger.exception("Full traceback:")
+        return None, None, None
+
+async def generate_simulated_price_history(timeframe="1hr"):
+    """Generate simulated price history as fallback."""
+    try:
+        logger.info(f"Generating simulated price data for timeframe {timeframe}")
+
+        # Set consistent seeds for reproducibility
         seed = int(datetime.now().timestamp()) // 300
         np.random.seed(seed)
         logger.info(f"Using seed {seed} for random generation")
 
-        # Configure timeframes with accurate periods and price ranges
+        # Configure timeframes
         timeframe_config = {
             "5m": {
                 "periods": 144,    # 12 hours in 5-minute intervals
                 "start_price": 0.0048,
                 "current_price": 0.0037,
-                "volatility": 0.002,
+                "volatility": 0.003,
                 "interval": 300    # 5 minutes in seconds
             },
             "15m": {
                 "periods": 96,     # 24 hours in 15-minute intervals
                 "start_price": 0.0052,
                 "current_price": 0.0037,
-                "volatility": 0.003,
+                "volatility": 0.004,
                 "interval": 900    # 15 minutes in seconds
             },
             "1hr": {
                 "periods": 72,     # 3 days in 1-hour intervals
-                "start_price": 0.015,
+                "start_price": 0.0048,
                 "current_price": 0.0037,
-                "volatility": 0.004,
+                "volatility": 0.005,
                 "interval": 3600   # 1 hour in seconds
             }
         }
@@ -76,14 +105,19 @@ async def get_lux_price_history(timeframe="1hr"):
         start_time = start_time.replace(minute=start_minutes)
         logger.info(f"Start time (Eastern): {start_time}, start_minutes: {start_minutes}")
 
-        # Initialize price variables with logging
+        # Initialize price variables with improved parameters
         current_price = config["start_price"]
-        trend = np.random.choice([-1, 1])
-        trend_strength = np.random.uniform(0.3, 0.7)
+        trend = -1  # Start with consistent downward trend
+        trend_strength = np.random.uniform(0.4, 0.8)  # Increased strength range
         volatility_base = config["volatility"]
         momentum = 0
 
         logger.info(f"Initial conditions: trend={trend}, trend_strength={trend_strength:.3f}, volatility={volatility_base:.6f}")
+
+        # Target price calculation
+        target_price = config["current_price"]
+        price_distance = target_price - current_price
+        periods_remaining = config["periods"]
 
         for i in range(config["periods"]):
             current_time = start_time + timedelta(seconds=i * config["interval"])
@@ -93,19 +127,15 @@ async def get_lux_price_history(timeframe="1hr"):
             if i % 10 == 0:  # Log every 10th candle
                 logger.info(f"Generating candle {i}/{config['periods']}: time={current_time.strftime('%m/%d %H:%M')}, price={current_price:.6f}")
 
-            # Randomly switch trend with diminishing probability
-            if np.random.random() < 0.15 * (1 - i/config["periods"]):
-                old_trend = trend
-                trend = -trend
-                trend_strength = np.random.uniform(0.3, 0.7)
-                volatility_base *= np.random.uniform(1.0, 1.5)
-                momentum = 0
-                logger.info(f"Trend switch at candle {i}: {old_trend} -> {trend}, new strength={trend_strength:.3f}")
+            # Adjust trend strength based on progress to target
+            if periods_remaining > 0:
+                target_change = price_distance / periods_remaining
+                trend_strength = abs(target_change / current_price) * 1.5
 
             # Generate price movement with improved realism
             trend_effect = trend * trend_strength * volatility_base
             random_walk = np.random.normal(0, volatility_base * 0.5)
-            target_effect = 0.15 * (config["current_price"] - current_price) / current_price
+            target_effect = 0.15 * (target_price - current_price) / current_price
 
             # Time-based volatility scaling
             hour = current_time.hour
@@ -116,8 +146,8 @@ async def get_lux_price_history(timeframe="1hr"):
             momentum = 0.7 * momentum + 0.3 * price_change * trend_strength
 
             # Ensure price stays within realistic bounds
-            current_price = max(min(current_price, config["start_price"] * 1.2), 
-                                config["current_price"] * 0.8)
+            current_price = max(min(current_price, config["start_price"] * 1.2),
+                                 target_price * 0.8)
 
             timestamps.append(timestamp)
             prices.append(current_price)
@@ -145,6 +175,8 @@ async def get_lux_price_history(timeframe="1hr"):
             }
             candles.append(candle)
 
+            periods_remaining -= 1
+
             # Log significant price movements
             if abs(price_change) > 0.02:  # Log large price changes
                 logger.info(f"Large price movement at {current_time}: {price_change:.2%}")
@@ -158,49 +190,92 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.exception("Full traceback:")
         return None, None, None
 
-def format_price_label(price):
-    """Format price in cents with appropriate scaling."""
-    cents = price * 100  # Convert to cents
-    if cents >= 1:
-        return f"{cents:.2f}¢"
-    elif cents >= 0.1:
-        return f"{cents:.3f}¢"
-    else:
-        return f"{cents:.4f}¢"
 
 def get_nice_scale_interval(min_val, max_val):
     """Calculate a nice scale interval for the Y-axis."""
     range_in_cents = (max_val - min_val) * 100
     logger.info(f"Price range in cents: {range_in_cents:.4f}")
 
-    # Define standard intervals in cents
-    standard_intervals = [0.0001, 0.0002, 0.0005, 
-                         0.001, 0.002, 0.005,
-                         0.01, 0.02, 0.05,
-                         0.1, 0.2, 0.5,
-                         1.0, 2.0, 5.0]
+    # Define standard intervals in cents (0.1¢ increments)
+    standard_intervals = [
+        0.1,    # 0.1 cents
+        0.2,    # 0.2 cents
+        0.3,    # 0.3 cents
+        0.4,    # 0.4 cents
+        0.5,    # 0.5 cents
+        1.0,    # 1.0 cents
+        2.0,    # 2.0 cents
+        5.0     # 5.0 cents
+    ]
 
     # Target around 5-7 intervals on the axis
     target_divisions = 6
     raw_interval = range_in_cents / target_divisions
     logger.info(f"Raw interval: {raw_interval:.4f} cents")
 
-    # Find the closest standard interval
+    # Find the closest standard interval that gives nice divisions
+    selected_interval = standard_intervals[-1]  # Default to largest
     for interval in standard_intervals:
+        num_divisions = range_in_cents / interval
+        if num_divisions >= 4 and num_divisions <= 8:  # Aim for 4-8 divisions
+            selected_interval = interval
+            break
         if interval > raw_interval:
-            logger.info(f"Selected interval: {interval:.4f} cents")
-            return interval / 100  # Convert back to decimal
+            selected_interval = interval
+            break
 
-    logger.info(f"Using maximum interval: {standard_intervals[-1]:.4f} cents")
-    return standard_intervals[-1] / 100
+    logger.info(f"Selected interval: {selected_interval:.1f} cents")
+    return selected_interval / 100  # Convert back to decimal
 
-async def create_price_chart(timeframe="1hr"):
+def format_price_label(price):
+    """Format price in cents with consistent decimal places."""
+    cents = price * 100  # Convert to cents
+
+    # Always show prices with one decimal place for consistency
+    formatted = f"{cents:.1f}¢"
+    logger.info(f"Formatted price {price} as {formatted}")
+    return formatted
+
+async def validate_price_data(timestamps, prices, candles):
+    """Validate price data for consistency and accuracy."""
+    if not all([timestamps, prices, candles]):
+        logger.error("Missing required price data components")
+        return False
+
+    try:
+        # Validate basic data structure
+        if len(timestamps) != len(prices) or len(timestamps) != len(candles):
+            logger.error("Mismatched data lengths")
+            return False
+
+        # Validate price ranges
+        for i, candle in enumerate(candles):
+            if not (0 < candle['low'] <= candle['high'] < 1):  # Assuming price should be between 0 and 1 USD
+                logger.warning(f"Invalid price range in candle {i}: low={candle['low']}, high={candle['high']}")
+                return False
+
+            # Verify OHLC relationships
+            if not (candle['low'] <= candle['open'] <= candle['high'] and 
+                   candle['low'] <= candle['close'] <= candle['high']):
+                logger.warning(f"Invalid OHLC relationships in candle {i}")
+                return False
+
+        logger.info("Price data validation passed")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error validating price data: {str(e)}")
+        return False
+
+async def create_price_chart(timeframe="1hr", use_nwa_price=False):
     """Create a traditional candlestick chart with clear visuals."""
     try:
         # Get price data
         timestamps, prices, candles = await get_lux_price_history(timeframe)
-        if not timestamps or not prices or not candles:
-            logger.error("Failed to get price data")
+
+        # Validate price data
+        if not await validate_price_data(timestamps, prices, candles):
+            logger.error("Price data validation failed")
             return None
 
         # Chart dimensions and padding
@@ -219,9 +294,14 @@ async def create_price_chart(timeframe="1hr"):
         # Calculate price range with padding
         high_prices = [c['high'] for c in candles]
         low_prices = [c['low'] for c in candles]
+
+        # If using NWA price for meme, include it in the range calculation
+        if use_nwa_price:
+            high_prices.append(NWA_ENTRY_PRICE)
+            low_prices.append(NWA_ENTRY_PRICE * 0.8)  # Show some range below entry
+
         max_price = max(high_prices) * 1.02
         min_price = min(low_prices) * 0.98
-        price_range = max_price - min_price
 
         # Get a nice interval for the scale
         interval = get_nice_scale_interval(min_price, max_price)
@@ -230,6 +310,8 @@ async def create_price_chart(timeframe="1hr"):
         min_price = math.floor(min_price / interval) * interval
         max_price = math.ceil(max_price / interval) * interval
         price_range = max_price - min_price
+
+        logger.info(f"Price range: {min_price:.6f} to {max_price:.6f}, interval: {interval:.6f}")
 
         # Load fonts
         try:
@@ -254,18 +336,18 @@ async def create_price_chart(timeframe="1hr"):
 
             # Only draw if within chart bounds
             if padding <= y <= height - padding:
-                draw.line([(padding, y), (width-padding, y)], fill=grid_color, width=1)
+                draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
                 price_str = format_price_label(price)
                 # Calculate text width for right alignment
                 text_bbox = draw.textbbox((0, 0), price_str, font=small_font)
                 text_width = text_bbox[2] - text_bbox[0]
-                draw.text((padding - text_width - 5, y-10), price_str, fill=label_color, font=small_font)
+                draw.text((padding - text_width - 5, y - 10), price_str, fill=label_color, font=small_font)
 
         # Draw vertical grid lines and time labels
         num_vert_lines = 8
         for i in range(num_vert_lines + 1):
             x = padding + (i * chart_width // num_vert_lines)
-            draw.line([(x, padding), (x, height-padding)], fill=grid_color, width=1)
+            draw.line([(x, padding), (x, height - padding)], fill=grid_color, width=1)
 
             if i < len(candles):
                 idx = int((i * (len(candles) - 1)) / num_vert_lines)
@@ -277,7 +359,7 @@ async def create_price_chart(timeframe="1hr"):
                     # Format time with date for all timeframes
                     time_str = eastern_dt.strftime("%m/%d\n%H:%M")
                     text_width = len(time_str) * 5
-                    draw.text((x - text_width/2, height-padding+10), 
+                    draw.text((x - text_width / 2, height - padding + 10),
                              time_str, fill=label_color, font=small_font)
 
         # Draw candlesticks with improved visibility
@@ -312,13 +394,23 @@ async def create_price_chart(timeframe="1hr"):
                 except Exception as e:
                     logger.error(f"Failed to draw candle at x={x}: {str(e)}")
                     # Fallback to line if rectangle fails
-                    draw.line([(x, min(open_y, close_y)), 
+                    draw.line([(x, min(open_y, close_y)),
                               (x + candle_width, max(open_y, close_y))],
                              fill=color, width=max(1, int(candle_width)))
 
             except Exception as e:
                 logger.error(f"Error drawing candle {i}: {str(e)}")
                 continue
+
+        # Draw NWA entry price line if requested
+        if use_nwa_price:
+            entry_y = padding + ((max_price - NWA_ENTRY_PRICE) * chart_height / price_range)
+            draw.line([(padding, entry_y), (width - padding, entry_y)], 
+                     fill='#FF4444', width=2, dash=(10, 10))
+            price_str = "NWA Entry: 1.50¢"
+            draw.text((padding + 10, entry_y - 20), price_str, 
+                     fill='#FF4444', font=small_font)
+
 
         # Save chart
         try:
