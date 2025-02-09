@@ -25,9 +25,9 @@ def get_price_roast():
     """Generate a price-specific roast based on current performance."""
     try:
         price, change = fetch_current_price()
-        if price < 0.0001:
-            return f"LUX worth less than NWA's first demo tape! ${price:.12f} - Pure Garbage! 💀"
-        elif change < -10:
+        if price < 0.01:  # Changed threshold to be more realistic
+            return f"LUX worth less than NWA's first demo tape! ${price:.4f} - Pure Garbage! 💀"
+        elif change < -5:  # More realistic threshold for negative change
             return f"Down BAD! LUX getting destroyed like it's on Death Row! Complete Trash! ⚰️"
         return None
     except Exception as e:
@@ -58,7 +58,7 @@ def generate_roast(max_retries=3):
                         },
                         {
                             "role": "user",
-                            "content": f"Generate a savage roast about Lux coin. Current price: ${price:.12f}, 24h change: {change}%"
+                            "content": f"Generate a savage roast about Lux coin. Current price: ${price:.4f}, 24h change: {change}%"
                         }
                     ],
                     max_tokens=50,
