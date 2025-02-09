@@ -8,26 +8,26 @@ import logging
 # Set up logging
 logger = logging.getLogger('discord_bot')
 
-# Meme templates with savage NWA content
+# Meme templates with more aggressive NWA content
 MEME_TEMPLATES = [
     {
         "image": "nick_laughing.jpg",
-        "default_text": "When Tino's mom finds out LUX dumped harder than her OnlyFans! 🤣💀",
+        "default_text": "Tino's mom's OF paying for his LUX losses! Raw dogged again! 🍑💦",
         "text_position": (10, 10)
     },
     {
         "image": "nick_pointing.jpg", 
-        "default_text": "NWA spotting another Tino rugpull incoming! Watch this fraud run! 👆🏃",
+        "default_text": "NWA catching this fraud Tino pumping his dogshit coin again! 👆🤡",
         "text_position": (10, 10)
     },
     {
         "image": "nick_malding.jpg",
-        "default_text": "Tino when Nick exposes his bitchass on stream again! 🤡🖕",
+        "default_text": "Tino getting exposed as a complete bitch on Nick's stream! Get rekt! 🖕💩",
         "text_position": (10, 10)
     },
     {
         "image": "ice_waiting.jpg",
-        "default_text": "Ice's community waiting for LUX to not be complete dogshit (impossible) ❌💩",
+        "default_text": "Waiting for Tino's mom's next OF post since LUX is fucking worthless! 🍑💸",
         "text_position": (10, 10)
     }
 ]

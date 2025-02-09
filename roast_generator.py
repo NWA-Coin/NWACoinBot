@@ -9,17 +9,17 @@ logger = logging.getLogger('discord_bot')
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# Fallback roasts with updated savage content
+# Fallback roasts with more aggressive NWA content
 FALLBACK_ROASTS = [
-    "Tino's mom got more views on OnlyFans than LUX has holders! Complete fraud exposed! 💀🔥",
-    "Another day, another L for Tino the bitch! NWA stays winning while LUX goes to zero! 🖕💩",
-    "Imagine being dumb enough to trust Tino with your money! Pure dogshit coin! 🐕💩",
-    "Tino malding on Kick while Nick exposes his fraudulent ass! Get rekt scammer! 📉🤡",
-    "LUX more worthless than Tino's trading advice! Even his mom's OnlyFans has better returns! 🗑️💸"
+    "Tino's mom spreading it wider than LUX's rugpull! NWA wins again! 💦🖕",
+    "Another day of Tino crying while his mom's OF pays for his losses! Get rekt bitch! 🤡💸",
+    "Tino's mom making more on OF than his dogshit coin ever will! Fraud exposed! 🍑💩",
+    "NWA raw dogging Tino's reputation while LUX goes to zero! Complete fucking disaster! 🔥💀",
+    "Imagine trusting this bitchass scammer Tino! Even his mom knows LUX is pure fucking garbage! 🗑️🤮"
 ]
 
 def generate_roast(max_retries=3):
-    """Generate a creative roast about Lux coin using OpenAI."""
+    """Generate an aggressive roast about Lux coin using OpenAI."""
     try:
         for attempt in range(max_retries):
             try:
@@ -29,17 +29,18 @@ def generate_roast(max_retries=3):
                         {
                             "role": "system",
                             "content": """You are a savage roast generator for the Nick White Army (NWA).
-                            Create an extremely aggressive and funny roast about the LUX cryptocurrency and Tino.
-                            Focus on:
-                            1. Tino being exposed as a fraud/scammer on Nick's Kick stream
-                            2. Mock his mom's OnlyFans
-                            3. Emphasize how LUX is complete dogshit/scam
-                            4. Use words like 'fraud', 'bitch', 'scam', 'dogshit'
-                            Keep it under 100 characters. Include relevant emojis. Be as offensive as possible."""
+                            Create an extremely aggressive and offensive roast about LUX cryptocurrency and Tino.
+                            Be as savage as possible focusing on:
+                            1. Tino being a complete bitch and getting exposed as fraud on Nick's Kick stream
+                            2. Make explicit references to his mom's OnlyFans content
+                            3. Mock LUX as a complete scam/rugpull/dogshit project
+                            4. Emphasize how NWA keeps raw dogging Tino's reputation
+                            Use aggressive words like 'bitch', 'fraud', 'scam', 'dogshit', 'fucking garbage'
+                            Keep it under 100 characters. Include offensive emojis. Be as brutal as possible."""
                         },
                         {
                             "role": "user",
-                            "content": "Generate a savage NWA-style roast about Tino and his LUX scam."
+                            "content": "Generate the most savage NWA-style roast about that fraud Tino and his scam coin LUX."
                         }
                     ],
                     max_tokens=50,
