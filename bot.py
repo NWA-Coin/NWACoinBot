@@ -113,7 +113,8 @@ async def crash(ctx):
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
-                f"Current Price: {price_in_cents:.4f}¢\n"
+                f"Current Price: {price_in_cents:.4f}¢\n"  # Prominently display cents
+                f"Entry Price: 1.5¢\n"  # Added for reference
                 f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
             )
 
