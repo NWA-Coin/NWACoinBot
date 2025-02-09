@@ -6,6 +6,7 @@ import logging
 import sys
 from datetime import datetime, timedelta
 import asyncio
+import time  # Add missing time import
 from roast_generator import generate_roast
 from meme_generator import generate_meme
 from price_chart import get_lux_price_history
@@ -30,9 +31,9 @@ if not TOKEN:
 
 # Bot setup with required intents
 intents = discord.Intents.default()
-intents.message_content = True  # Required for responding to messages
-intents.guild_messages = True   # Required for guild messages
-intents.guilds = True          # Required for guild/server join
+intents.message_content = True
+intents.guild_messages = True
+intents.guilds = True
 
 class PersistentBot(commands.Bot):
     def __init__(self):
@@ -46,11 +47,75 @@ class PersistentBot(commands.Bot):
         self.start_time = datetime.now()
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 50
+        self.heartbeat_check_task = None  # Add task reference
 
     async def setup_hook(self):
         """Called when the bot is first setting up"""
-        self.heartbeat_check.start()
+        # Start heartbeat check as a background task
+        self.heartbeat_check_task = self.heartbeat_check.start()
         logger.info("Bot setup completed, heartbeat check started")
+
+    @commands.command(name='roast', help='Get a savage roast about LUX')
+    async def roast(self, ctx):
+        """Generate a roast about LUX."""
+        try:
+            logger.info(f"Roast command received from {ctx.author}")
+            roast = generate_roast()
+            await ctx.send(roast)
+            logger.info("Roast command completed successfully")
+        except Exception as e:
+            logger.error(f"Error in roast command: {str(e)}")
+            await ctx.send("❌ Failed to generate roast. Please try again!")
+
+    @commands.command(name='meme', help='Generate a savage meme with current LUX price')
+    async def meme(self, ctx):
+        """Generate and send a meme about LUX."""
+        try:
+            logger.info(f"Meme command received from {ctx.author}")
+            await ctx.send("Generating price chart... Please wait...")
+
+            meme_result = generate_meme()
+            if meme_result and meme_result.endswith('.png'):
+                logger.info("Successfully generated meme image")
+                with open(meme_result, 'rb') as f:
+                    await ctx.send(file=discord.File(f))
+                os.remove(meme_result)
+                logger.info("Meme sent and temp file cleaned up")
+            else:
+                logger.warning(f"Meme generation returned unexpected result: {meme_result}")
+                await ctx.send(meme_result)
+        except Exception as e:
+            logger.error(f"Error in meme command: {str(e)}")
+            await ctx.send("❌ Failed to generate meme. Please try again!")
+
+    @commands.command(name='crash', help='Show how much LUX crashed since NWA started shorting')
+    async def crash(self, ctx):
+        """Show LUX price crash stats."""
+        try:
+            logger.info(f"Crash command received from {ctx.author}")
+            await ctx.send("Fetching price data... Please wait...")
+
+            dates, prices = get_lux_price_history()
+            if not dates or not prices:
+                logger.error("Failed to get price data")
+                await ctx.send("❌ Failed to get price data. Probably rugpulled to zero! 💀")
+                return
+
+            current_price = prices[-1]
+            entry_price = 0.015
+            crash_percent = ((entry_price - current_price) / entry_price) * 100
+
+            message = f"💥 LUX CRASH UPDATE 💥\n"
+            message += f"NWA Entry: ${entry_price:.4f}\n"
+            message += f"Current Price: ${current_price:.8f}\n"
+            message += f"Crashed: {crash_percent:.2f}% 📉\n"
+            message += "NWA KEEPS WINNING! 🔥 TINO KEEPS CRYING! 😭"
+
+            await ctx.send(message)
+            logger.info(f"Crash command completed successfully. Current price: ${current_price:.8f}")
+        except Exception as e:
+            logger.error(f"Error in crash command: {str(e)}")
+            await ctx.send("❌ Failed to get crash stats. Probably as dead as Tino's reputation!")
 
     @tasks.loop(minutes=1)
     async def heartbeat_check(self):
@@ -96,7 +161,7 @@ class PersistentBot(commands.Bot):
             # Calculate backoff time
             backoff_time = min(300, 60 * self.reconnect_attempts)
             logger.info(f"Waiting {backoff_time} seconds before next attempt")
-            await asyncio.sleep(backoff_time)  # Exponential backoff
+            await asyncio.sleep(backoff_time)
 
     async def on_ready(self):
         """Called when the bot is ready."""
@@ -114,79 +179,23 @@ class PersistentBot(commands.Bot):
         except Exception as e:
             logger.error(f"Error in on_ready: {str(e)}")
 
+    async def on_command_error(self, ctx, error):
+        """Handle command errors."""
+        try:
+            if isinstance(error, commands.CommandNotFound):
+                await ctx.send("❌ Command not found! Use `!help` to see available commands.")
+            elif isinstance(error, commands.MissingPermissions):
+                await ctx.send("❌ I don't have permission to do that!")
+            else:
+                logger.error(f"Command error: {str(error)}")
+                await ctx.send("❌ An error occurred. Please try again!")
+        except Exception as e:
+            logger.error(f"Error handling command error: {str(e)}")
+
+# Create single bot instance
 bot = PersistentBot()
 
-@bot.event
-async def on_command_error(ctx, error):
-    """Handle command errors."""
-    try:
-        if isinstance(error, commands.CommandNotFound):
-            await ctx.send("❌ Command not found! Use `!help` to see available commands.")
-        elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("❌ I don't have permission to do that!")
-        else:
-            logger.error(f"Command error: {str(error)}")
-            await ctx.send("❌ An error occurred. Please try again!")
-    except Exception as e:
-        logger.error(f"Error handling command error: {str(e)}")
-
-@bot.command(name='roast', help='Get a savage roast about LUX')
-async def roast_command(ctx):
-    """Generate a roast about LUX."""
-    try:
-        roast = generate_roast()
-        await ctx.send(roast)
-    except Exception as e:
-        logger.error(f"Error in roast command: {str(e)}")
-        await ctx.send("❌ Failed to generate roast. Please try again!")
-
-@bot.command(name='meme', help='Generate a savage meme with current LUX price')
-async def meme_command(ctx):
-    """Generate and send a meme about LUX."""
-    try:
-        meme_result = generate_meme()
-        if meme_result and meme_result.endswith('.png'):
-            # Send image meme
-            with open(meme_result, 'rb') as f:
-                await ctx.send(file=discord.File(f))
-            # Clean up temp file
-            os.remove(meme_result)
-        else:
-            # Send text-only meme
-            await ctx.send(meme_result)
-    except Exception as e:
-        logger.error(f"Error in meme command: {str(e)}")
-        await ctx.send("❌ Failed to generate meme. Please try again!")
-
-@bot.command(name='crash', help='Show how much LUX crashed since NWA started shorting')
-async def crash_command(ctx):
-    """Show LUX price crash stats."""
-    try:
-        # Get price history
-        dates, prices = get_lux_price_history()
-        if not dates or not prices:
-            await ctx.send("❌ Failed to get price data. Probably rugpulled to zero! 💀")
-            return
-
-        current_price = prices[-1]  # Most recent price
-        # NWA entry price when they started attacking LUX
-        entry_price = 0.015
-        crash_percent = ((entry_price - current_price) / entry_price) * 100
-
-        message = f"💥 LUX CRASH UPDATE 💥\n"
-        message += f"NWA Entry: ${entry_price:.4f}\n"
-        message += f"Current Price: ${current_price:.8f}\n"
-        message += f"Crashed: {crash_percent:.2f}% 📉\n"
-        message += "NWA KEEPS WINNING! 🔥 TINO KEEPS CRYING! 😭"
-
-        await ctx.send(message)
-    except Exception as e:
-        logger.error(f"Error in crash command: {str(e)}")
-        await ctx.send("❌ Failed to get crash stats. Probably as dead as Tino's reputation!")
-
 if __name__ == "__main__":
-    import time  # Add time import for synchronous sleep
-
     while True:
         try:
             logger.info("Starting bot...")
@@ -197,6 +206,5 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Bot crashed: {str(e)}")
             logger.info("Attempting to restart in 60 seconds...")
-            # Use synchronous sleep instead of asyncio.sleep
             time.sleep(60)
             continue
