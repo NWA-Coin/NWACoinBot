@@ -38,36 +38,48 @@ def generate_roast():
     return random.choice(ROAST_TEMPLATES)
 
 def get_lux_price_data():
-    """Fetch live $LUX token data."""
+    """Fetch live $LUX token data and 7-day historical data."""
     try:
-        # Use CoinGecko API for LUX price data
-        url = "https://api.coingecko.com/api/v3/simple/price"
-        params = {
+        # Get current price data
+        current_url = "https://api.coingecko.com/api/v3/simple/price"
+        current_params = {
             "ids": "luxor",
             "vs_currencies": "usd",
-            "include_24hr_change": "true",
-            "include_7d_change": "true"
+            "include_24hr_change": "true"
         }
-        response = requests.get(url, params=params)
-        data = response.json()
+        current_response = requests.get(current_url, params=current_params, timeout=10)
+        current_data = current_response.json()
 
-        if "luxor" in data:
-            price = data["luxor"]["usd"]
-            change_7d = data["luxor"].get("usd_7d_change", -95.0)  # Default to -95% if not available
+        # Get 7-day historical data
+        history_url = "https://api.coingecko.com/api/v3/coins/luxor/market_chart"
+        history_params = {
+            "vs_currency": "usd",
+            "days": "7",
+            "interval": "daily"
+        }
+        history_response = requests.get(history_url, params=history_params, timeout=10)
+        history_data = history_response.json()
 
-            # Format price with appropriate decimals
-            if price < 0.01:
-                price_str = f"${price:.8f}"
+        if "luxor" in current_data and "prices" in history_data:
+            current_price = current_data["luxor"]["usd"]
+            price_points = [p for p in history_data["prices"] if p[1] > 0]  # Filter out invalid prices
+
+            if not price_points:  # If no valid prices found
+                return None
+
+            # Calculate percentage change
+            start_price = price_points[0][1]
+            if start_price == 0:  # Avoid division by zero
+                change_7d = 0
             else:
-                price_str = f"${price:.6f}"
-
-            change_str = f" (7d: {change_7d:+.1f}%)"
+                change_7d = ((current_price - start_price) / start_price) * 100
 
             return {
-                "price": price,
-                "price_str": price_str,
+                "price": current_price,
+                "price_str": f"${current_price:.8f}" if current_price < 0.01 else f"${current_price:.6f}",
                 "change_7d": change_7d,
-                "change_str": change_str
+                "change_str": f" (7d: {change_7d:+.1f}%)",
+                "history": price_points
             }
         return None
     except Exception as e:
@@ -81,85 +93,141 @@ def create_meme_image(text):
     image = Image.new('RGB', (width, height), color='#1a1a1a')
     draw = ImageDraw.Draw(image)
 
-    # Draw chart grid (more subtle)
+    # Draw subtle grid
     for i in range(0, width, 50):
         draw.line([(i, 0), (i, height)], fill='#222222', width=1)
     for i in range(0, height, 50):
         draw.line([(0, i), (width, i)], fill='#222222', width=1)
 
-    # Get live price data
+    # Get price data
     price_data = get_lux_price_data()
 
-    # Draw a dramatic straight-down trend
-    points = []
-    x_step = width / 20
+    if price_data and price_data.get("history"):
+        # Get min and max prices for scaling
+        prices = [point[1] for point in price_data["history"]]
+        min_price = min(prices)
+        max_price = max(prices)
 
-    if price_data and price_data["change_7d"]:
-        # Calculate start and end y-coordinates for the line
-        start_y = height * 0.1  # Start at 10% from top
-        end_y = height * 0.9    # End at 90% from top
+        if min_price == max_price:  # Handle flat price line
+            min_price *= 0.99
+            max_price *= 1.01
 
-        # Generate points for a nearly straight line down with slight variation
-        for i in range(21):
-            x = i * x_step
-            progress = i / 20.0
+        price_range = max_price - min_price
 
-            # Add very minimal noise for a mostly straight line
-            noise = random.uniform(-10, 10) if i > 0 and i < 20 else 0
-            y = start_y + (end_y - start_y) * progress + noise
+        # Add padding to price range
+        padding = price_range * 0.1
+        min_price -= padding
+        max_price += padding
+        price_range = max_price - min_price
 
+        # Setup chart area
+        chart_area = {
+            'left': width * 0.15,    # Increased left margin
+            'right': width * 0.85,   # Decreased right margin
+            'top': height * 0.2,
+            'bottom': height * 0.6   # Reduced bottom to make room for text
+        }
+
+        chart_width = chart_area['right'] - chart_area['left']
+        chart_height = chart_area['bottom'] - chart_area['top']
+
+        # Draw price labels on Y-axis
+        price_steps = 5
+        for i in range(price_steps + 1):
+            price = min_price + (price_range * (i / price_steps))
+            y = chart_area['bottom'] - (i / price_steps) * chart_height
+            price_label = f"${price:.8f}" if price < 0.01 else f"${price:.6f}"
+
+            # Draw dotted line
+            dash_length = 5
+            x = chart_area['left']
+            while x < chart_area['right']:
+                draw.line([(x, y), (x + dash_length, y)], fill='#333333', width=1)
+                x += dash_length * 2
+
+            # Draw price label
+            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+            label_bbox = draw.textbbox((0, 0), price_label, font=label_font)
+            label_width = label_bbox[2] - label_bbox[0]
+            draw.text((chart_area['left'] - label_width - 10, y - 6), 
+                     price_label, font=label_font, fill='#888888')
+
+        # Plot data points
+        points = []
+        history = price_data["history"]
+        for i, (timestamp, price) in enumerate(history):
+            x = chart_area['left'] + (i / (len(history) - 1)) * chart_width
+            y = chart_area['bottom'] - ((price - min_price) / price_range) * chart_height
             points.append((x, y))
+
+            # Draw point
+            circle_radius = 4
+            draw.ellipse([(x - circle_radius - 1, y - circle_radius - 1),
+                         (x + circle_radius + 1, y + circle_radius + 1)],
+                        fill='white')
+            draw.ellipse([(x - circle_radius, y - circle_radius),
+                         (x + circle_radius, y + circle_radius)],
+                        fill='#ff4444')
+
+            # Draw price label above point
+            price_label = f"${price:.8f}" if price < 0.01 else f"${price:.6f}"
+            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+            label_bbox = draw.textbbox((0, 0), price_label, font=label_font)
+            label_width = label_bbox[2] - label_bbox[0]
+            label_x = x - label_width/2
+            label_y = y - 20
+
+            draw.text((label_x, label_y), price_label, font=label_font, fill='#888888')
+
+        # Draw lines between points
+        if len(points) > 1:
+            draw.line(points, fill='#ff4444', width=2)
+
+        # Draw X-axis labels (dates)
+        for i, (timestamp, _) in enumerate(history):
+            x = chart_area['left'] + (i / (len(history) - 1)) * chart_width
+            label = "Now" if i == len(history) - 1 else f"{len(history) - 1 - i}d"
+
+            label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+            label_bbox = draw.textbbox((0, 0), label, font=label_font)
+            label_width = label_bbox[2] - label_bbox[0]
+            label_x = x - label_width/2
+            label_y = chart_area['bottom'] + 10
+
+            draw.text((label_x, label_y), label, font=label_font, fill='#888888')
+
     else:
-        # Fallback to a dramatic straight down trend
-        for i in range(21):
-            x = i * x_step
-            y = height * (i / 20.0)
-            points.append((x, y))
+        # Draw "No Data Available" message
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        message = "Price data unavailable"
+        bbox = draw.textbbox((0, 0), message, font=font)
+        message_width = bbox[2] - bbox[0]
+        x = (width - message_width) // 2
+        y = height // 2
+        draw.text((x, y), message, font=font, fill='#ff4444')
 
-    # Draw price trend with enhanced visuals
-    if len(points) > 1:
-        # Draw shadow with higher opacity
-        shadow_points = points + [(points[-1][0], height), (points[0][0], height)]
-        draw.polygon(shadow_points, fill='#ff000044')
-
-        # Draw multiple lines for glow effect
-        for offset in range(3):
-            draw.line(points, fill='#ff2222', width=4-offset)
-
-        # Add time markers
-        draw.text((10, height - 30), "7d ago", font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16), fill='#888888')
-        draw.text((width - 60, height - 30), "now", font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16), fill='#888888')
-
+    # Draw header with current price
     try:
-        # Try system fonts first with smaller sizes
-        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        title_font = ImageFont.truetype(font_path, 48)  # Reduced from 60
-        text_font = ImageFont.truetype(font_path, 32)   # Reduced from 40
+        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
     except:
-        title_font = text_font = ImageFont.load_default()
+        title_font = ImageFont.load_default()
 
-    # Draw price with enhanced formatting
     if price_data:
         price_text = f"$LUX: {price_data['price_str']}{price_data['change_str']}"
     else:
         price_text = "$LUX: Price Unavailable 📉"
 
-    price_bbox = draw.textbbox((0, 0), price_text, font=title_font)
-    price_width = price_bbox[2] - price_bbox[0]
-    x = (width - price_width) // 2
-
-    # Draw price text with thicker outline
-    y = 40  # Moved up slightly
-    outline_color = 'black'
-    for dx, dy in [(-2,-2), (-2,2), (2,-2), (2,2)]:
-        draw.text((x + dx, y + dy), price_text, font=title_font, fill=outline_color)
+    bbox = draw.textbbox((0, 0), price_text, font=title_font)
+    text_width = bbox[2] - bbox[0]
+    x = (width - text_width) // 2
+    y = 40
     draw.text((x, y), price_text, font=title_font, fill='#ff4444')
 
-    # Format roast text with smaller font
+    # Draw roast text at the bottom
     words = text.split()
     lines = []
     current_line = []
-    max_line_length = 50  # Increased due to smaller font
+    max_line_length = 50
 
     for word in words:
         current_line.append(word)
@@ -174,28 +242,21 @@ def create_meme_image(text):
     if current_line:
         lines.append(' '.join(current_line))
 
-    # Draw text with improved visibility
-    text_start_y = height - (len(lines) * 45) - 50  # Reduced spacing between lines
-
-    # Draw semi-transparent background for text
-    text_box_height = len(lines) * 45 + 40
+    # Draw text with semi-transparent background
+    text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+    text_start_y = height - (len(lines) * 40) - 40
+    text_box_height = len(lines) * 40 + 40
     text_box = Image.new('RGBA', (width, text_box_height), (0, 0, 0, 180))
     image.paste(text_box, (0, text_start_y - 20), text_box)
 
     # Draw each line of text
     y = text_start_y
     for line in lines:
-        line_bbox = draw.textbbox((0, 0), line, font=text_font)
-        line_width = line_bbox[2] - line_bbox[0]
+        bbox = draw.textbbox((0, 0), line, font=text_font)
+        line_width = bbox[2] - bbox[0]
         x = (width - line_width) // 2
-
-        # Draw outline for visibility
-        for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:  # Thinner outline
-            draw.text((x + dx, y + dy), line, font=text_font, fill='black')
-
-        # Draw main text
         draw.text((x, y), line, font=text_font, fill='white')
-        y += 45  # Reduced from 60
+        y += 40
 
     # Convert to bytes
     img_byte_arr = io.BytesIO()

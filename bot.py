@@ -139,15 +139,12 @@ async def delete_custom_roast(ctx, index: int):
 async def show_commands(ctx):
     """Show available commands."""
     try:
-        help_text = """
-**Available Commands:**
+        help_text = """**Available Commands:**
 `!roast` - Get a random roast about Lux coin
 `!memeroast` - Get a random roast as a meme image
 `!addroast <text>` - Add your own custom roast
 `!listroasts` - Show all custom roasts with their numbers
-`!deleteroast <number>` - Delete a custom roast by its number
-`!commands` - Show this command list
-        """
+`!deleteroast <number>` - Delete a custom roast by its number"""
         await ctx.send(help_text)
     except Exception as e:
         print(f"Error in commands command: {str(e)}")
