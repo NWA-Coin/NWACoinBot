@@ -57,19 +57,17 @@ async def get_crash_stats():
         logger.error(f"Error getting crash stats: {str(e)}")
         return None, None
 
-def generate_roast():
+async def generate_roast():
     """Generate a savage roast focusing on technical and project failures."""
     try:
         logger.info("Starting roast generation")
 
-        # Create new event loop for async operations
+        # Get crash stats
         try:
-            crash_percent, price_in_cents = asyncio.run(get_crash_stats())
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            crash_percent, price_in_cents = loop.run_until_complete(get_crash_stats())
-            loop.close()
+            crash_percent, price_in_cents = await get_crash_stats()
+        except Exception as e:
+            logger.error(f"Error getting crash stats: {str(e)}")
+            crash_percent, price_in_cents = None, None
 
         # Generate roast based on crash stats
         try:

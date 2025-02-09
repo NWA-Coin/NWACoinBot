@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
     "selenium>=4.28.1",
+    "trafilatura>=2.0.0",
     "twilio>=9.4.4",
     "webdriver-manager>=4.0.2",
 ]

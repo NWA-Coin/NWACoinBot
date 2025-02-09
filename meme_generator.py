@@ -17,10 +17,10 @@ logger = logging.getLogger('discord_bot')
 async def get_crash_stats():
     """Get crash stats for roast."""
     try:
-        dates, prices = await get_lux_price_history()
-        if dates and prices:
+        candles = await get_lux_price_history()
+        if candles:
             entry_price = 0.015  # NWA entry price
-            current_price = prices[-1]
+            current_price = candles[-1]['close']
             crash_percent = ((entry_price - current_price) / entry_price) * 100
             price_in_cents = current_price * 100
             logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
@@ -35,8 +35,9 @@ def generate_meme():
     try:
         logger.info("Starting price chart meme generation")
 
-        # Generate chart using matplotlib
+        # Generate candlestick chart
         chart_path = create_price_chart()
+
         if not chart_path:
             logger.error("Failed to generate chart")
             raise Exception("Chart generation failed")
@@ -87,7 +88,7 @@ def generate_meme():
                 for dy in range(-outline_width, outline_width+1):
                     if dx != 0 or dy != 0:
                         draw.text((text_pos[0]+dx, text_pos[1]+dy),
-                                roast, font=font, fill=outline_color)
+                                 roast, font=font, fill=outline_color)
 
             # Draw main text
             draw.text(text_pos, roast, font=font, fill=text_color)

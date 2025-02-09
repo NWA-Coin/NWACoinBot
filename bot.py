@@ -85,7 +85,7 @@ async def roast(ctx):
     logger.info(f'Executing roast command for {ctx.author}')
     try:
         await ctx.send("🔥 Generating savage NWA roast...")
-        roast_text = generate_roast()
+        roast_text = await generate_roast()
         await ctx.send(roast_text)
         logger.info("Successfully sent roast")
     except Exception as e:
