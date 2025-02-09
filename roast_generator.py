@@ -24,10 +24,8 @@ def generate_roast(max_retries=3):
         for attempt in range(max_retries):
             try:
                 logger.info(f"Generating roast (attempt {attempt + 1}/{max_retries})")
-                # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
-                # do not change this unless explicitly requested by the user
                 response = client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-3.5-turbo",  # Using more widely available model
                     messages=[
                         {
                             "role": "system",

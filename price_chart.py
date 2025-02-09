@@ -1,3 +1,6 @@
+# Set up matplotlib with Agg backend first
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import requests
 from datetime import datetime, timedelta
@@ -6,18 +9,19 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import os
 import time
+import aiohttp
+import asyncio
 
 # Set up logging with more detailed format
 logger = logging.getLogger('discord_bot')
-logger.setLevel(logging.DEBUG) # Ensure debug messages are logged
+logger.setLevel(logging.DEBUG)  # Ensure debug messages are logged
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
-def get_lux_price_history():
-    """Get LUX price history from CoinGecko."""
+async def get_lux_price_history():
+    """Get LUX price history from CoinGecko asynchronously."""
     max_retries = 3
     retry_delay = 2
 
@@ -35,64 +39,65 @@ def get_lux_price_history():
             }
 
             logger.info(f"Making API request to: {url}")
-            response = requests.get(url, params=params, timeout=10)
-            logger.info(f"API Response Status: {response.status_code}")
-            logger.debug(f"API Response Headers: {response.headers}")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as response:
+                    logger.info(f"API Response Status: {response.status}")
+                    logger.debug(f"API Response Headers: {response.headers}")
 
-            if response.status_code == 429:
-                logger.warning("Rate limited by CoinGecko API")
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
-                    logger.info(f"Waiting {wait_time} seconds before retry")
-                    time.sleep(wait_time)
-                    continue
-                logger.error("Max retries reached for rate limit")
-                return generate_mock_data()
+                    if response.status == 429:
+                        logger.warning("Rate limited by CoinGecko API")
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                            logger.info(f"Waiting {wait_time} seconds before retry")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        logger.error("Max retries reached for rate limit")
+                        return await generate_mock_data()
 
-            if response.status_code != 200:
-                logger.error(f"API Error {response.status_code}: {response.text}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                return generate_mock_data()
+                    if response.status != 200:
+                        logger.error(f"API Error {response.status}: {await response.text()}")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        return await generate_mock_data()
 
-            data = response.json()
-            logger.debug(f"Raw API response: {data}")
+                    data = await response.json()
+                    logger.debug(f"Raw API response: {data}")
 
-            if not data or 'prices' not in data:
-                logger.error(f"Invalid API response format: {data}")
-                return generate_mock_data()
+                    if not data or 'prices' not in data:
+                        logger.error(f"Invalid API response format: {data}")
+                        return await generate_mock_data()
 
-            # Extract price data points with enhanced logging
-            prices = [p[1] for p in data['prices']]
-            dates = [datetime.fromtimestamp(p[0]/1000) for p in data['prices']]
+                    # Extract price data points with enhanced logging
+                    prices = [p[1] for p in data['prices']]
+                    dates = [datetime.fromtimestamp(p[0]/1000) for p in data['prices']]
 
-            if not prices or not dates:
-                logger.error("Empty price data received")
-                return generate_mock_data()
+                    if not prices or not dates:
+                        logger.error("Empty price data received")
+                        return await generate_mock_data()
 
-            logger.info(f"Successfully fetched {len(prices)} price points")
-            logger.info(f"Price range: ${min(prices):.8f} - ${max(prices):.8f}")
-            logger.info(f"Date range: {dates[0]} - {dates[-1]}")
-            return dates, prices
+                    logger.info(f"Successfully fetched {len(prices)} price points")
+                    logger.info(f"Price range: ${min(prices):.8f} - ${max(prices):.8f}")
+                    logger.info(f"Date range: {dates[0]} - {dates[-1]}")
+                    return dates, prices
 
-        except requests.exceptions.Timeout:
+        except asyncio.TimeoutError:
             logger.error(f"Timeout on attempt {attempt + 1}")
             if attempt < max_retries - 1:
-                time.sleep(retry_delay)
+                await asyncio.sleep(retry_delay)
                 continue
-            return generate_mock_data()
+            return await generate_mock_data()
 
         except Exception as e:
             logger.error(f"Unexpected error in get_lux_price_history: {str(e)}")
             logger.exception("Full traceback:")
-            return generate_mock_data()
+            return await generate_mock_data()
 
     logger.error("All attempts failed")
-    return generate_mock_data()
+    return await generate_mock_data()
 
-def generate_mock_data():
-    """Generate realistic mock price data."""
+async def generate_mock_data():
+    """Generate realistic mock price data asynchronously."""
     try:
         logger.warning("Using mock price data")
         days = 30
@@ -132,31 +137,40 @@ def create_price_chart():
         logger.info("Starting price chart creation")
 
         # Get price data
-        dates, prices = get_lux_price_history()
+        logger.debug("Setting up asyncio event loop")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        logger.info("Fetching price data")
+        dates, prices = loop.run_until_complete(get_lux_price_history())
+        loop.close()
+        logger.debug("Closed asyncio loop")
+
         if not dates or not prices:
-            logger.error("Failed to get price data")
+            logger.error("Failed to get price data - dates or prices is empty")
             return None
 
         # Calculate crash percentage
         entry_price = 0.015  # NWA entry price
         current_price = prices[-1]
         crash_percent = ((entry_price - current_price) / entry_price) * 100
-        logger.info(f"Calculated crash: {crash_percent:.2f}%")
+        price_in_cents = current_price * 100
+        logger.info(f"Calculated crash: {crash_percent:.2f}%, current price: {price_in_cents:.4f}¢")
 
         # Create chart with dark theme
+        logger.debug("Creating matplotlib figure")
         plt.style.use('dark_background')
-        fig, ax = plt.subplots(figsize=(12, 6))
+        fig, ax = plt.subplots(figsize=(12, 6), facecolor='#2F3136')
 
         # Plot price line with gradient color based on crash severity
         color = 'red' if crash_percent > 50 else 'orange'
         ax.plot(dates, prices, color=color, linewidth=2)
 
         # Customize chart
-        title = f"LUX/USD Price Chart\nDown {crash_percent:.1f}% since NWA Entry"
+        title = f"LUX/USD Price Chart\nCurrent: {price_in_cents:.4f}¢\nDown {crash_percent:.1f}% since NWA Entry"
         ax.set_title(title, color='white', size=14, pad=20)
         ax.set_xlabel("Date", color='white', size=12)
         ax.set_ylabel("Price (USD)", color='white', size=12)
-        ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.8f'))
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x*100:.4f}¢"))
 
         # Customize grid and ticks
         ax.grid(True, alpha=0.2)
@@ -165,28 +179,39 @@ def create_price_chart():
 
         # Add NWA entry line
         ax.axhline(y=entry_price, color='yellow', linestyle='--', alpha=0.5,
-                  label=f'NWA Entry: ${entry_price:.4f}')
+                  label=f'NWA Entry: {entry_price*100:.4f}¢')
         ax.legend(facecolor='#2F3136', edgecolor='white')
+
+        # Ensure the figure has a tight layout
+        plt.tight_layout()
 
         # Save base chart
         temp_chart = "temp_chart.png"
-        plt.savefig(temp_chart, bbox_inches='tight', dpi=300, 
+        logger.debug(f"Saving temporary chart to {temp_chart}")
+        plt.savefig(temp_chart, bbox_inches='tight', dpi=300,
                    facecolor='#2F3136', edgecolor='none')
         plt.close()
 
+        if not os.path.exists(temp_chart):
+            logger.error("Failed to save temporary chart file")
+            return None
+
+        logger.debug("Opening temporary chart for adding text overlay")
         # Add roast overlay
         img = Image.open(temp_chart)
         draw = ImageDraw.Draw(img)
 
         # Generate roast based on crash percentage
         if crash_percent >= 90:
-            roast = f"DOWN {crash_percent:.1f}%! COMPLETE RUGPULL! 💀"
+            roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.4f}¢) COMPLETE RUGPULL! 💀"
         elif crash_percent >= 70:
-            roast = f"DUMPED {crash_percent:.1f}%! TINO IN SHAMBLES! 🖕"
+            roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.4f}¢) TINO IN SHAMBLES! 🖕"
         elif crash_percent >= 50:
-            roast = f"CRASHING {crash_percent:.1f}%! NWA WINS AGAIN! 🔥"
+            roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.4f}¢) NWA WINS AGAIN! 🔥"
         else:
-            roast = f"DUMPING {crash_percent:.1f}%! TINO'S REPUTATION! 💸"
+            roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.4f}¢) TINO'S REPUTATION! 💸"
+
+        logger.debug(f"Generated roast text: {roast}")
 
         # Configure text rendering
         font = ImageFont.load_default()
@@ -196,10 +221,11 @@ def create_price_chart():
         text_pos = (20, 20)
 
         # Draw text with outline for better visibility
+        logger.debug("Adding text overlay to chart")
         for dx in range(-outline_width, outline_width+1):
             for dy in range(-outline_width, outline_width+1):
                 if dx != 0 or dy != 0:
-                    draw.text((text_pos[0]+dx, text_pos[1]+dy), 
+                    draw.text((text_pos[0]+dx, text_pos[1]+dy),
                             roast, font=font, fill=outline_color)
 
         # Draw main text
@@ -207,10 +233,16 @@ def create_price_chart():
 
         # Save final chart with timestamp
         final_path = f"price_chart_{int(datetime.now().timestamp())}.png"
+        logger.debug(f"Saving final chart to {final_path}")
         img.save(final_path, quality=95)
+
+        if not os.path.exists(final_path):
+            logger.error("Failed to save final chart file")
+            return None
 
         # Clean up temporary file
         try:
+            logger.debug(f"Cleaning up temporary file: {temp_chart}")
             os.remove(temp_chart)
         except Exception as e:
             logger.warning(f"Failed to remove temp chart: {str(e)}")
@@ -220,4 +252,5 @@ def create_price_chart():
 
     except Exception as e:
         logger.error(f"Error creating price chart: {str(e)}")
+        logger.exception("Full traceback:")
         return None
