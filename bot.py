@@ -9,12 +9,19 @@ import logging
 from aiohttp import web
 import threading
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging with more details
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger('discord_bot')
 
 # Load environment variables
 load_dotenv()
+token = os.getenv('DISCORD_TOKEN')
+if not token:
+    logger.error("No Discord token found in environment variables!")
+    exit(1)
 
 # Bot setup with required intents
 intents = discord.Intents.default()
@@ -22,43 +29,39 @@ intents.message_content = True
 intents.guild_messages = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=commands.DefaultHelpCommand())
 
-# Command cooldowns to prevent duplicate execution
-command_cooldowns = {}
-
-def commands_ready():
-    """Check if commands are ready to be used again."""
-    current_time = asyncio.get_event_loop().time()
-    for cmd, timestamp in list(command_cooldowns.items()):
-        if current_time - timestamp > 3:  # 3 second cooldown
-            del command_cooldowns[cmd]
-
 async def start_http_server():
     """Start a simple HTTP server for health checks."""
-    app = web.Application()
+    try:
+        app = web.Application()
 
-    async def health_check(request):
-        return web.Response(text="Bot is running")
+        async def health_check(request):
+            return web.Response(text="Bot is running")
 
-    app.router.add_get('/', health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 5000)
-    await site.start()
-    logger.info("HTTP server started on port 5000")
+        app.router.add_get('/', health_check)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 5000)
+        await site.start()
+        logger.info("HTTP server started on port 5000")
+    except Exception as e:
+        logger.error(f"Failed to start HTTP server: {str(e)}")
 
 @bot.event
 async def on_ready():
     """Called when the bot is ready."""
-    logger.info(f'Logged in as {bot.user.name}')
-    logger.info(f'Bot ID: {bot.user.id}')
-    logger.info('Bot is ready!')
+    try:
+        logger.info(f'Logged in as {bot.user.name}')
+        logger.info(f'Bot ID: {bot.user.id}')
+        logger.info('Bot is ready!')
 
-    # Start HTTP server for health checks
-    await start_http_server()
+        # Start HTTP server for health checks after bot is ready
+        bot.loop.create_task(start_http_server())
 
-    # Print invite link
-    logger.info('\nInvite link:')
-    logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
+        # Print invite link
+        logger.info('\nInvite link:')
+        logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
+    except Exception as e:
+        logger.error(f"Error in on_ready: {str(e)}")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -106,13 +109,6 @@ async def lux_price(ctx):
 @bot.command(name='roast', help="Get a witty, AI-generated roast about Lux coin")
 async def roast_command(ctx):
     """Generate a roast about Lux coin."""
-    cmd_key = f"roast_{ctx.channel.id}"
-    current_time = asyncio.get_event_loop().time()
-
-    if cmd_key in command_cooldowns:
-        return  # Ignore if command is on cooldown
-
-    command_cooldowns[cmd_key] = current_time
     logger.info(f"Processing !roast command from {ctx.author}")
 
     try:
@@ -127,13 +123,9 @@ async def roast_command(ctx):
 
 # Run the bot
 if __name__ == "__main__":
-    token = os.getenv('DISCORD_TOKEN')
-    if not token:
-        logger.error("Error: No Discord token found!")
-        exit(1)
     try:
         logger.info("Starting bot...")
-        bot.run(token)
+        bot.run(token, log_handler=None)  # Disable discord.py's default logging
     except discord.LoginFailure:
         logger.error("Error: Failed to login. Invalid token!")
     except Exception as e:
