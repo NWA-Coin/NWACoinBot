@@ -188,12 +188,8 @@ async def create_price_chart(timeframe="1hr"):
                 idx = int((i * (len(candles) - 1)) / num_vert_lines)
                 if idx < len(candles):
                     dt = datetime.fromtimestamp(candles[idx]['timestamp'] / 1000)
-                    # Format time based on timeframe
-                    if timeframe in ["5m", "15m"]:
-                        time_str = dt.strftime("%H:%M")
-                    else:
-                        time_str = dt.strftime("%m/%d\n%H:%M")
-
+                    # Format time with date for all timeframes
+                    time_str = dt.strftime("%m/%d\n%H:%M")
                     text_width = len(time_str) * 5
                     draw.text((x - text_width/2, height-padding+10), 
                              time_str, fill=label_color, font=small_font)
