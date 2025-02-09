@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.jq
     pkgs.libpng
     pkgs.zlib
     pkgs.tk

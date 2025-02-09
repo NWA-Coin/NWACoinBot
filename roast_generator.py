@@ -4,7 +4,7 @@ import io
 import os
 import requests
 
-# Predefined roast templates remain unchanged
+# Predefined roast templates
 ROAST_TEMPLATES = [
     "Lux coin is so slow, Internet Explorer feels fast in comparison! 🐌",
     "Lux's market cap is like my dating life - constantly disappointing! 📉",
@@ -38,88 +38,128 @@ def generate_roast():
     return random.choice(ROAST_TEMPLATES)
 
 def get_lux_price_data():
-    """Fetch live $LUX token data from CoinGecko."""
+    """Fetch live $LUX token data."""
     try:
-        # Using CoinGecko API to get LUX token data
+        # Use CoinGecko API for LUX price data
         url = "https://api.coingecko.com/api/v3/simple/price"
         params = {
-            "ids": "lux-pad",  # Updated CoinGecko ID for LUX token
+            "ids": "luxor",
             "vs_currencies": "usd",
-            "include_24hr_change": "true"
+            "include_24hr_change": "true",
+            "include_7d_change": "true"
         }
         response = requests.get(url, params=params)
         data = response.json()
 
-        if "lux-pad" in data:
-            price = data["lux-pad"]["usd"]
-            change_24h = data["lux-pad"].get("usd_24h_change", 0)
-            # Format with fallbacks for None values
-            price_str = f"${price:.8f}" if price is not None else "Unknown"
-            change_str = f" ({change_24h:+.2f}%)" if change_24h is not None else ""
-            return f"{price_str}{change_str}"
-        return "Price: TBA 📊"
+        if "luxor" in data:
+            price = data["luxor"]["usd"]
+            change_7d = data["luxor"].get("usd_7d_change", -95.0)  # Default to -95% if not available
+
+            # Format price with appropriate decimals
+            if price < 0.01:
+                price_str = f"${price:.8f}"
+            else:
+                price_str = f"${price:.6f}"
+
+            change_str = f" (7d: {change_7d:+.1f}%)"
+
+            return {
+                "price": price,
+                "price_str": price_str,
+                "change_7d": change_7d,
+                "change_str": change_str
+            }
+        return None
     except Exception as e:
         print(f"Error fetching price: {str(e)}")
-        return "Chart Loading... 📈"
+        return None
 
 def create_meme_image(text):
     """Create a meme image with the given text and live $LUX data."""
-    # Create a new image with a dark background
-    width = 1200  # Increased width
-    height = 800  # Increased height
+    width = 1200
+    height = 800
     image = Image.new('RGB', (width, height), color='#1a1a1a')
     draw = ImageDraw.Draw(image)
 
-    # Draw chart grid
+    # Draw chart grid (more subtle)
     for i in range(0, width, 50):
-        draw.line([(i, 0), (i, height)], fill='#2a2a2a', width=1)
+        draw.line([(i, 0), (i, height)], fill='#222222', width=1)
     for i in range(0, height, 50):
-        draw.line([(0, i), (width, i)], fill='#2a2a2a', width=1)
-
-    # Draw a mock price chart (downward trend)
-    points = []
-    x_step = width / 20
-    current_y = height * 0.3
-    for i in range(21):
-        x = i * x_step
-        current_y += random.uniform(5, 15)
-        if current_y > height * 0.8:
-            current_y = height * 0.8
-        points.append((x, current_y))
-
-    # Draw the price line
-    for i in range(len(points) - 1):
-        draw.line([points[i], points[i + 1]], fill='#ff4444', width=4)
+        draw.line([(0, i), (width, i)], fill='#222222', width=1)
 
     # Get live price data
-    price_text = get_lux_price_data()
+    price_data = get_lux_price_data()
 
-    # Try to use a very large font, fallback to default if not available
+    # Draw a dramatic straight-down trend
+    points = []
+    x_step = width / 20
+
+    if price_data and price_data["change_7d"]:
+        # Calculate start and end y-coordinates for the line
+        start_y = height * 0.1  # Start at 10% from top
+        end_y = height * 0.9    # End at 90% from top
+
+        # Generate points for a nearly straight line down with slight variation
+        for i in range(21):
+            x = i * x_step
+            progress = i / 20.0
+
+            # Add very minimal noise for a mostly straight line
+            noise = random.uniform(-10, 10) if i > 0 and i < 20 else 0
+            y = start_y + (end_y - start_y) * progress + noise
+
+            points.append((x, y))
+    else:
+        # Fallback to a dramatic straight down trend
+        for i in range(21):
+            x = i * x_step
+            y = height * (i / 20.0)
+            points.append((x, y))
+
+    # Draw price trend with enhanced visuals
+    if len(points) > 1:
+        # Draw shadow with higher opacity
+        shadow_points = points + [(points[-1][0], height), (points[0][0], height)]
+        draw.polygon(shadow_points, fill='#ff000044')
+
+        # Draw multiple lines for glow effect
+        for offset in range(3):
+            draw.line(points, fill='#ff2222', width=4-offset)
+
+        # Add time markers
+        draw.text((10, height - 30), "7d ago", font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16), fill='#888888')
+        draw.text((width - 60, height - 30), "now", font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16), fill='#888888')
+
     try:
-        # Try system fonts first
+        # Try system fonts first with smaller sizes
         font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        title_font = ImageFont.truetype(font_path, 80)  # Larger font for price
-        text_font = ImageFont.truetype(font_path, 60)   # Larger font for roast
+        title_font = ImageFont.truetype(font_path, 48)  # Reduced from 60
+        text_font = ImageFont.truetype(font_path, 32)   # Reduced from 40
     except:
         title_font = text_font = ImageFont.load_default()
 
-    # Draw price at the top
-    price_bbox = draw.textbbox((0, 0), f"$LUX: {price_text}", font=title_font)
+    # Draw price with enhanced formatting
+    if price_data:
+        price_text = f"$LUX: {price_data['price_str']}{price_data['change_str']}"
+    else:
+        price_text = "$LUX: Price Unavailable 📉"
+
+    price_bbox = draw.textbbox((0, 0), price_text, font=title_font)
     price_width = price_bbox[2] - price_bbox[0]
     x = (width - price_width) // 2
 
-    # Draw price text with outline
-    y = 50
+    # Draw price text with thicker outline
+    y = 40  # Moved up slightly
     outline_color = 'black'
-    for dx, dy in [(-3,-3), (-3,3), (3,-3), (3,3)]:
-        draw.text((x + dx, y + dy), f"$LUX: {price_text}", font=title_font, fill=outline_color)
-    draw.text((x, y), f"$LUX: {price_text}", font=title_font, fill='#ff4444')
+    for dx, dy in [(-2,-2), (-2,2), (2,-2), (2,2)]:
+        draw.text((x + dx, y + dy), price_text, font=title_font, fill=outline_color)
+    draw.text((x, y), price_text, font=title_font, fill='#ff4444')
 
-    # Add the roast text
+    # Format roast text with smaller font
     words = text.split()
     lines = []
     current_line = []
-    max_line_length = 30  # Limit characters per line
+    max_line_length = 50  # Increased due to smaller font
 
     for word in words:
         current_line.append(word)
@@ -135,28 +175,27 @@ def create_meme_image(text):
         lines.append(' '.join(current_line))
 
     # Draw text with improved visibility
-    text_start_y = height - (len(lines) * 80) - 50  # More space between lines
+    text_start_y = height - (len(lines) * 45) - 50  # Reduced spacing between lines
 
     # Draw semi-transparent background for text
-    text_box_height = len(lines) * 80 + 40
+    text_box_height = len(lines) * 45 + 40
     text_box = Image.new('RGBA', (width, text_box_height), (0, 0, 0, 180))
     image.paste(text_box, (0, text_start_y - 20), text_box)
 
     # Draw each line of text
     y = text_start_y
     for line in lines:
-        # Get line width for centering
         line_bbox = draw.textbbox((0, 0), line, font=text_font)
         line_width = line_bbox[2] - line_bbox[0]
         x = (width - line_width) // 2
 
         # Draw outline for visibility
-        for dx, dy in [(-3,-3), (-3,3), (3,-3), (3,3)]:
+        for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:  # Thinner outline
             draw.text((x + dx, y + dy), line, font=text_font, fill='black')
 
         # Draw main text
         draw.text((x, y), line, font=text_font, fill='white')
-        y += 80  # Increased line spacing
+        y += 45  # Reduced from 60
 
     # Convert to bytes
     img_byte_arr = io.BytesIO()
