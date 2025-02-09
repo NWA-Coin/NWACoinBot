@@ -42,24 +42,36 @@ bot = commands.Bot(
 # Remove default help command
 bot.remove_command('help')
 
+# Track connection state
+last_heartbeat = datetime.now()
+reconnect_attempts = 0
+MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects/reconnects"""
+    global reconnect_attempts, last_heartbeat
+    reconnect_attempts = 0  # Reset counter on successful connection
+    last_heartbeat = datetime.now()
+
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
-    # Start keep-alive loop if not already running
+    # Start keep-alive and heartbeat monitoring tasks
     bot.loop.create_task(keep_alive())
-    logger.info("Started keep-alive task")
+    bot.loop.create_task(monitor_heartbeat())
+    logger.info("Started keep-alive and heartbeat monitoring tasks")
 
 async def keep_alive():
-    """Keep-alive loop to maintain bot connection"""
+    """Enhanced keep-alive loop to maintain bot connection"""
+    global last_heartbeat
     logger.info("Starting keep-alive loop")
     while True:
         try:
             if not bot.is_closed():
+                last_heartbeat = datetime.now()
                 logger.info("Keep-alive heartbeat: Bot is active")
                 await bot.change_presence(
                     activity=discord.Game(name="!help | Roasting LUX"),
@@ -68,10 +80,44 @@ async def keep_alive():
                 await asyncio.sleep(15)  # Check every 15 seconds
             else:
                 logger.warning("Keep-alive detected closed connection")
+                await handle_disconnection()
                 await asyncio.sleep(5)  # Brief delay before retry
         except Exception as e:
             logger.error(f"Error in keep-alive loop: {str(e)}")
             await asyncio.sleep(5)
+
+async def monitor_heartbeat():
+    """Monitor bot's heartbeat and force reconnect if needed"""
+    global last_heartbeat, reconnect_attempts
+    while True:
+        try:
+            await asyncio.sleep(30)  # Check every 30 seconds
+            if datetime.now() - last_heartbeat > timedelta(minutes=2):
+                logger.warning("No heartbeat detected for 2 minutes")
+                await handle_disconnection()
+        except Exception as e:
+            logger.error(f"Error in heartbeat monitor: {str(e)}")
+            await asyncio.sleep(5)
+
+async def handle_disconnection():
+    """Handle bot disconnection with exponential backoff"""
+    global reconnect_attempts
+    try:
+        reconnect_attempts += 1
+        delay = min(5 * (2 ** (reconnect_attempts - 1)), MAX_RECONNECT_DELAY)
+        logger.info(f"Attempting reconnection (attempt {reconnect_attempts}) after {delay}s delay")
+
+        if not bot.is_closed():
+            await bot.close()  # Clean disconnect if needed
+
+        await asyncio.sleep(delay)
+
+        if bot.is_closed():
+            await bot.start(TOKEN, reconnect=True)
+
+    except Exception as e:
+        logger.error(f"Reconnection attempt failed: {str(e)}")
+        await asyncio.sleep(5)
 
 @bot.event
 async def on_resumed():
@@ -309,6 +355,6 @@ if __name__ == "__main__":
             logger.exception("Full traceback:")
             time.sleep(restart_delay)
             # Increase delay for next retry, max 30 seconds
-            restart_delay = min(restart_delay * 1.5, 30)
+            restart_delay = min(restart_delay * 2, 30)
             last_restart = current_time
             continue
