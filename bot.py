@@ -62,18 +62,26 @@ async def on_ready():
 
 async def keep_alive():
     """Keep-alive loop to maintain bot connection"""
-    logger.info("Starting keep-alive loop")  # Added logging
+    logger.info("Starting keep-alive loop")
     while True:
         try:
             if not bot.is_closed():
-                logger.info("Keep-alive heartbeat: Bot is active")  # Enhanced logging
+                logger.info("Keep-alive heartbeat: Bot is active")
+                # Update presence more frequently to maintain connection
                 await bot.change_presence(
                     activity=discord.Game(name="!help | Roasting LUX"),
-                    status=discord.Status.online  # Explicitly set online status
+                    status=discord.Status.online
                 )
+                await asyncio.sleep(15)  # Reduced from 30 to 15 seconds
             else:
-                logger.warning("Keep-alive detected closed connection, attempting to reconnect")
-            await asyncio.sleep(30)  # Heartbeat every 30 seconds
+                logger.warning("Keep-alive detected closed connection")
+                # Force reconnection if connection is closed
+                if not bot.is_closed():
+                    try:
+                        await bot.connect(reconnect=True)
+                    except Exception as e:
+                        logger.error(f"Reconnection attempt failed: {str(e)}")
+                await asyncio.sleep(5)  # Short delay before retry
         except Exception as e:
             logger.error(f"Error in keep-alive loop: {str(e)}")
             await asyncio.sleep(5)  # Wait before retry
@@ -82,18 +90,25 @@ async def keep_alive():
 async def on_resumed():
     """Log when the bot resumes a session after disconnect"""
     logger.info("Bot resumed connection")
+    # Force status update on resume
+    await update_bot_status()
     # Ensure keep-alive task is running
     for task in asyncio.all_tasks(bot.loop):
         if task.get_name() == 'keep_alive':
             break
     else:
-        bot.loop.create_task(keep_alive())
+        bot.loop.create_task(keep_alive(), name='keep_alive')
 
 @bot.event
 async def on_disconnect():
     """Log disconnection and attempt immediate reconnect"""
     logger.warning("Bot disconnected. Attempting to reconnect...")
-    await asyncio.sleep(1)  # Brief delay before reconnect attempt
+    try:
+        if not bot.is_closed():
+            await bot.connect(reconnect=True)
+    except Exception as e:
+        logger.error(f"Reconnection attempt failed: {str(e)}")
+    await asyncio.sleep(1)  # Brief delay before next attempt
 
 @bot.event
 async def on_error(event, *args, **kwargs):
