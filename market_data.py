@@ -13,7 +13,7 @@ COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY')
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 LUX_ID = "lux-token"  # CoinGecko asset ID for LUX token
 
-# Rate limiting configuration for demo tier
+# Rate limiting configuration
 MIN_API_INTERVAL = 30  # Minimum seconds between API calls
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
@@ -21,17 +21,16 @@ RETRY_DELAY = 5  # seconds
 async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[List[Dict]]]:
     """Fetch live LUX market data from CoinGecko API with retries."""
     try:
-        # Map timeframes to days for demo API tier
+        # Map timeframes to days for API request
         timeframe_map = {
-            "5m": "2",     # 2 days of data (will filter later)
-            "15m": "2",    # 2 days of data (will filter later)
+            "5m": "2",     # 2 days of data
+            "15m": "2",    # 2 days of data
             "1hr": "3"     # 3 days of data
         }
 
         days = timeframe_map.get(timeframe, "3")
         logger.info(f"Fetching {days} days of price data for timeframe {timeframe}")
 
-        # Set timeout for API requests
         timeout = aiohttp.ClientTimeout(total=15)
 
         for retry in range(MAX_RETRIES):
@@ -91,40 +90,39 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
 
                                 logger.info(f"After filtering: {len(price_data)} price points")
 
-                                if not price_data:
-                                    logger.error("No price data after filtering")
-                                    if retry < MAX_RETRIES - 1:
-                                        await asyncio.sleep(RETRY_DELAY * (retry + 1))
-                                    continue
-
                                 timestamps = []
                                 prices = []
                                 candles = []
 
-                                for timestamp, price in price_data:
-                                    if not isinstance(timestamp, (int, float)) or not isinstance(price, (int, float)):
-                                        logger.warning(f"Invalid data point: ts={timestamp}, price={price}")
-                                        continue
+                                # Generate OHLC data with proper candle structure
+                                for i in range(0, len(price_data) - 1):
+                                    current_price = float(price_data[i][1])
+                                    next_price = float(price_data[i + 1][1])
+                                    timestamp = int(price_data[i][0])
 
-                                    if price <= 0:
-                                        logger.warning(f"Skipping invalid price: {price}")
-                                        continue
+                                    # Calculate realistic OHLC values
+                                    price_range = abs(next_price - current_price)
+                                    volatility = price_range * 0.5  # Use half the price movement for volatility
 
-                                    ts = int(timestamp)
-                                    price = float(price)
+                                    high = max(current_price, next_price) + (volatility * 0.3)  # Add some volatility
+                                    low = min(current_price, next_price) - (volatility * 0.3)   # Subtract some volatility
 
-                                    timestamps.append(ts)
-                                    prices.append(price)
-
-                                    # Generate candle data with realistic variations
                                     candle = {
-                                        'timestamp': ts,
-                                        'open': price,
-                                        'high': price * 1.002,  # 0.2% variation
-                                        'low': price * 0.998,   # 0.2% variation
-                                        'close': price
+                                        'timestamp': timestamp,
+                                        'open': current_price,
+                                        'high': high,
+                                        'low': low,
+                                        'close': next_price
                                     }
+
+                                    timestamps.append(timestamp)
+                                    prices.append(current_price)
                                     candles.append(candle)
+
+                                # Add the last price point
+                                if price_data:
+                                    timestamps.append(int(price_data[-1][0]))
+                                    prices.append(float(price_data[-1][1]))
 
                                 if len(candles) < 2:
                                     logger.error("Insufficient price data points")
