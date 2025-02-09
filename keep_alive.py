@@ -17,7 +17,13 @@ def home():
 def run():
     """Run the Flask app in a separate thread"""
     try:
-        app.run(host='0.0.0.0', port=8080)
+        logger.info("Starting Flask server on port 8081")
+        app.run(
+            host='0.0.0.0',
+            port=8081,
+            threaded=True,
+            debug=False
+        )
     except Exception as e:
         logger.error(f"Flask server error: {str(e)}")
         time.sleep(5)  # Wait before retry

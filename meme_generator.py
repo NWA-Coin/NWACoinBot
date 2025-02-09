@@ -44,9 +44,6 @@ async def generate_meme(timeframe="1hr"):
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             font = ImageFont.load_default()
 
-        # Format timeframe text (showing actual price movement)
-        timeframe_text = f"({timeframe_change:+.1f}% in {timeframe})"
-
         # Generate roast based on crash percentage
         if crash_percent >= 90:
             roast = f"DOWN {crash_percent:.1f}%! COMPLETE RUGPULL! ({price_str})"
@@ -59,21 +56,30 @@ async def generate_meme(timeframe="1hr"):
 
         logger.info(f"Generated roast text: {roast}")
 
+        # Create title based on timeframe
+        title = f"$LUX {timeframe} Chart"
+
         # Add text with outline
         text_color = 'white'
         outline_color = 'black'
         outline_width = 2
-        text_pos = (20, 10)
 
-        # Draw outline
+        # Position for title and roast
+        title_pos = (20, 10)
+        roast_pos = (20, 50)  # Moved down to make room for title
+
+        # Draw outline and text for title
         for dx in range(-outline_width, outline_width+1):
             for dy in range(-outline_width, outline_width+1):
                 if dx != 0 or dy != 0:
-                    draw.text((text_pos[0]+dx, text_pos[1]+dy),
+                    draw.text((title_pos[0]+dx, title_pos[1]+dy),
+                            title, font=font, fill=outline_color)
+                    draw.text((roast_pos[0]+dx, roast_pos[1]+dy),
                             roast, font=font, fill=outline_color)
 
         # Draw main text
-        draw.text(text_pos, roast, font=font, fill=text_color)
+        draw.text(title_pos, title, font=font, fill=text_color)
+        draw.text(roast_pos, roast, font=font, fill=text_color)
 
         # Save final meme with high quality
         final_path = f"price_meme_{int(datetime.now().timestamp())}.png"
