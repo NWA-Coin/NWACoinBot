@@ -15,7 +15,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 1  # seconds
 
 async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[List[Dict]]]:
-    """Fetch live LUX market data from API with retries."""
+    """Fetch live LUX market data from MEXC API with retries."""
     try:
         global last_api_call
 
@@ -27,41 +27,28 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
 
         last_api_call = now
 
-        # Configure API endpoint
+        # Configure API endpoints for MEXC
         base_url = "https://api.mexc.com"
         symbol = "LUXUSDT"  # LUX/USDT trading pair
 
-        # Map timeframes to API intervals
-        interval_map = {
-            "5m": "5m",
-            "15m": "15m",
-            "1hr": "1h"
+        # Map timeframes to API intervals (MEXC uses different interval format)
+        timeframe_map = {
+            "5m": "5m",    # 12 hours of 5m candles
+            "15m": "15m",  # 24 hours of 15m candles
+            "1hr": "1h"    # 3 days of 1h candles
         }
 
-        interval = interval_map.get(timeframe, "1h")
+        # Get correct interval or default to 1h
+        interval = timeframe_map.get(timeframe, "1h")
+        logger.info(f"Using interval {interval} for timeframe {timeframe}")
 
-        # Calculate time range based on timeframe
-        end_time = datetime.now(pytz.UTC)
-        if timeframe == "5m":
-            start_time = end_time - timedelta(hours=12)
-        elif timeframe == "15m":
-            start_time = end_time - timedelta(days=1)
-        else:
-            start_time = end_time - timedelta(days=3)
-
-        # Convert timestamps to milliseconds
-        start_ts = int(start_time.timestamp() * 1000)
-        end_ts = int(end_time.timestamp() * 1000)
-
-        # Construct API endpoint with proper parameters
-        endpoint = f"{base_url}/api/v3/klines"
-        params = {
-            "symbol": symbol,
-            "interval": interval,
-            "startTime": start_ts,
-            "endTime": end_ts,
-            "limit": 1000  # Maximum data points
+        # Configure candlestick limits
+        limit_map = {
+            "5m": 144,   # 12 hours
+            "15m": 96,   # 24 hours
+            "1hr": 72    # 3 days
         }
+        limit = limit_map.get(timeframe, 72)
 
         # Set timeout for API requests
         timeout = aiohttp.ClientTimeout(total=10)  # 10 seconds timeout
@@ -71,6 +58,15 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
             try:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     logger.info(f"Attempting to fetch market data (attempt {retry + 1}/{MAX_RETRIES})")
+
+                    # Construct API endpoint with proper parameters
+                    endpoint = f"{base_url}/api/v3/klines"
+                    params = {
+                        "symbol": symbol,
+                        "interval": interval,
+                        "limit": limit
+                    }
+
                     async with session.get(endpoint, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
@@ -84,23 +80,25 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                             prices = []
                             candles = []
 
-                            for candle in data:
+                            for candle_data in data:
                                 try:
-                                    # MEXC API returns: [timestamp, open, high, low, close, volume, ...]
-                                    timestamp = int(candle[0])  # Open time
-                                    open_price = float(candle[1])
-                                    high_price = float(candle[2])
-                                    low_price = float(candle[3])
-                                    close_price = float(candle[4])
+                                    # MEXC Kline data format:
+                                    # [timestamp, open, high, low, close, volume, ...]
+                                    timestamp = int(candle_data[0])
+                                    open_price = float(candle_data[1])
+                                    high_price = float(candle_data[2])
+                                    low_price = float(candle_data[3])
+                                    close_price = float(candle_data[4])
 
                                     # Validate price data
                                     if any(p <= 0 for p in [open_price, high_price, low_price, close_price]):
-                                        logger.warning(f"Invalid price data in candle: {candle}")
+                                        logger.warning(f"Invalid price data at timestamp {timestamp}")
                                         continue
 
-                                    # Additional validation
-                                    if high_price < low_price or open_price > high_price or open_price < low_price:
-                                        logger.warning(f"Invalid price relationships in candle: {candle}")
+                                    # Verify OHLC relationships
+                                    if not (low_price <= open_price <= high_price and 
+                                          low_price <= close_price <= high_price):
+                                        logger.warning(f"Invalid OHLC relationships at timestamp {timestamp}")
                                         continue
 
                                     timestamps.append(timestamp)
@@ -112,6 +110,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                                         'low': low_price,
                                         'close': close_price
                                     })
+
                                 except (IndexError, ValueError) as e:
                                     logger.error(f"Error processing candle data: {str(e)}")
                                     continue
@@ -122,6 +121,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
 
                             logger.info(f"Successfully fetched {len(candles)} candles of live market data")
                             return timestamps, prices, candles
+
                         else:
                             logger.error(f"API request failed with status {response.status}: {await response.text()}")
 

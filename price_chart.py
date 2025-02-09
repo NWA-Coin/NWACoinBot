@@ -267,6 +267,34 @@ async def validate_price_data(timestamps, prices, candles):
         logger.error(f"Error validating price data: {str(e)}")
         return False
 
+def draw_dashed_line(draw, start, end, color, width=1, dash_length=10):
+    """Draw a dashed line since PIL doesn't support the dash parameter."""
+    x1, y1 = start
+    x2, y2 = end
+
+    # Calculate line length and angle
+    length = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+    if length == 0:
+        return
+
+    # Calculate dx and dy for each dash
+    dx = (x2 - x1) * dash_length / length
+    dy = (y2 - y1) * dash_length / length
+
+    # Draw dashes
+    curr_x, curr_y = x1, y1
+    is_dash = True  # Start with a dash
+
+    while ((curr_x - x1) * (x2 - x1) + (curr_y - y1) * (y2 - y1)) < length * length:
+        next_x = min(curr_x + dx, x2) if x2 > x1 else max(curr_x + dx, x2)
+        next_y = min(curr_y + dy, y2) if y2 > y1 else max(curr_y + dy, y2)
+
+        if is_dash:
+            draw.line([(curr_x, curr_y), (next_x, next_y)], fill=color, width=width)
+
+        curr_x, curr_y = next_x, next_y
+        is_dash = not is_dash
+
 async def create_price_chart(timeframe="1hr", use_nwa_price=False):
     """Create a traditional candlestick chart with clear visuals."""
     try:
@@ -295,23 +323,17 @@ async def create_price_chart(timeframe="1hr", use_nwa_price=False):
         high_prices = [c['high'] for c in candles]
         low_prices = [c['low'] for c in candles]
 
-        # If using NWA price for meme, include it in the range calculation
+        # Only include NWA price in range calculation if specifically requested
         if use_nwa_price:
             high_prices.append(NWA_ENTRY_PRICE)
             low_prices.append(NWA_ENTRY_PRICE * 0.8)  # Show some range below entry
 
         max_price = max(high_prices) * 1.02
         min_price = min(low_prices) * 0.98
+        price_range = max_price - min_price
 
         # Get a nice interval for the scale
         interval = get_nice_scale_interval(min_price, max_price)
-
-        # Adjust min and max to nice values
-        min_price = math.floor(min_price / interval) * interval
-        max_price = math.ceil(max_price / interval) * interval
-        price_range = max_price - min_price
-
-        logger.info(f"Price range: {min_price:.6f} to {max_price:.6f}, interval: {interval:.6f}")
 
         # Load fonts
         try:
@@ -326,10 +348,8 @@ async def create_price_chart(timeframe="1hr", use_nwa_price=False):
         grid_color = '#2F3136'
         label_color = '#FFFFFF'
 
-        # Calculate number of intervals to show
-        num_intervals = int(price_range / interval)
-
         # Draw horizontal grid lines and price labels
+        num_intervals = int((max_price - min_price) / interval)
         for i in range(num_intervals + 1):
             price = min_price + (i * interval)
             y = padding + ((max_price - price) * chart_height / price_range)
@@ -338,7 +358,6 @@ async def create_price_chart(timeframe="1hr", use_nwa_price=False):
             if padding <= y <= height - padding:
                 draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
                 price_str = format_price_label(price)
-                # Calculate text width for right alignment
                 text_bbox = draw.textbbox((0, 0), price_str, font=small_font)
                 text_width = text_bbox[2] - text_bbox[0]
                 draw.text((padding - text_width - 5, y - 10), price_str, fill=label_color, font=small_font)
@@ -352,11 +371,8 @@ async def create_price_chart(timeframe="1hr", use_nwa_price=False):
             if i < len(candles):
                 idx = int((i * (len(candles) - 1)) / num_vert_lines)
                 if idx < len(candles):
-                    # Convert timestamp to Eastern time
                     utc_dt = datetime.fromtimestamp(candles[idx]['timestamp'] / 1000, pytz.UTC)
                     eastern_dt = utc_dt.astimezone(eastern)
-
-                    # Format time with date for all timeframes
                     time_str = eastern_dt.strftime("%m/%d\n%H:%M")
                     text_width = len(time_str) * 5
                     draw.text((x - text_width / 2, height - padding + 10),
@@ -364,53 +380,45 @@ async def create_price_chart(timeframe="1hr", use_nwa_price=False):
 
         # Draw candlesticks with improved visibility
         candle_spacing = chart_width / len(candles)
-        candle_width = max(3, min(candle_spacing * 0.8, 8))  # Min 3px, max 8px width
+        candle_width = max(3, min(candle_spacing * 0.8, 8))
 
         for i, candle in enumerate(candles):
-            try:
-                x = padding + (i * candle_spacing)
+            x = padding + (i * candle_spacing)
 
-                # Calculate y-coordinates
-                open_y = padding + ((max_price - candle['open']) * chart_height / price_range)
-                close_y = padding + ((max_price - candle['close']) * chart_height / price_range)
-                high_y = padding + ((max_price - candle['high']) * chart_height / price_range)
-                low_y = padding + ((max_price - candle['low']) * chart_height / price_range)
+            # Calculate y-coordinates using the price range
+            open_y = padding + ((max_price - candle['open']) * chart_height / price_range)
+            close_y = padding + ((max_price - candle['close']) * chart_height / price_range)
+            high_y = padding + ((max_price - candle['high']) * chart_height / price_range)
+            low_y = padding + ((max_price - candle['low']) * chart_height / price_range)
 
-                # Determine candle color (red for down, green for up)
-                color = '#FF4444' if candle['close'] < candle['open'] else '#44FF44'
+            # Determine candle color (red for down, green for up)
+            color = '#FF4444' if candle['close'] < candle['open'] else '#44FF44'
 
-                # Draw wick
-                wick_x = x + (candle_width / 2)
-                draw.line([(wick_x, high_y), (wick_x, low_y)], fill=color, width=1)
+            # Draw wick
+            wick_x = x + (candle_width / 2)
+            draw.line([(wick_x, high_y), (wick_x, low_y)], fill=color, width=1)
 
-                # Draw candle body
-                body_coords = (
-                    x, min(open_y, close_y),
-                    x + candle_width, max(open_y, close_y)
-                )
+            # Draw candle body
+            draw.rectangle([
+                x, min(open_y, close_y),
+                x + candle_width, max(open_y, close_y)
+            ], fill=color, outline=color)
 
-                try:
-                    draw.rectangle(body_coords, fill=color, outline=color)
-                except Exception as e:
-                    logger.error(f"Failed to draw candle at x={x}: {str(e)}")
-                    # Fallback to line if rectangle fails
-                    draw.line([(x, min(open_y, close_y)),
-                              (x + candle_width, max(open_y, close_y))],
-                             fill=color, width=max(1, int(candle_width)))
-
-            except Exception as e:
-                logger.error(f"Error drawing candle {i}: {str(e)}")
-                continue
-
-        # Draw NWA entry price line if requested
+        # Draw NWA entry price line only if specifically requested
         if use_nwa_price:
             entry_y = padding + ((max_price - NWA_ENTRY_PRICE) * chart_height / price_range)
-            draw.line([(padding, entry_y), (width - padding, entry_y)], 
-                     fill='#FF4444', width=2, dash=(10, 10))
+            # Use custom dashed line function instead of unsupported dash parameter
+            draw_dashed_line(
+                draw, 
+                (padding, entry_y), 
+                (width - padding, entry_y),
+                color='#FF4444',
+                width=2,
+                dash_length=10
+            )
             price_str = "NWA Entry: 1.50¢"
             draw.text((padding + 10, entry_y - 20), price_str, 
                      fill='#FF4444', font=small_font)
-
 
         # Save chart
         try:

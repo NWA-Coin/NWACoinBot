@@ -225,15 +225,13 @@ async def crash(ctx):
         await ctx.send("💥 Fetching latest LUX crash data...")
         dates, prices, _ = await get_lux_price_history()  # Ignore candles
         if dates and prices:
-            entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
-            crash_percent = ((entry_price - current_price) / entry_price) * 100
+            crash_percent = ((0.015 - current_price) / 0.015) * 100
             price_str = format_price_label(current_price)
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
                 f"Current Price: {price_str}\n"
-                f"Entry Price: 1.50¢\n"
                 f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
             )
 

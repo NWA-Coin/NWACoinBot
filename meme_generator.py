@@ -40,9 +40,10 @@ async def generate_meme(timeframe="1hr"):
     try:
         logger.info("Starting price chart meme generation")
 
-        # Generate candlestick chart
+        # Generate candlestick chart with NWA entry price line for memes
         logger.info(f"Calling create_price_chart with timeframe {timeframe}")
-        chart_path = await create_price_chart(timeframe, use_nwa_price=True)  # Pass flag to use NWA entry price
+        # Always include NWA entry price line for meme command
+        chart_path = await create_price_chart(timeframe, use_nwa_price=True)
         logger.info(f"Received chart path: {chart_path}")
 
         if not chart_path:
@@ -73,6 +74,7 @@ async def generate_meme(timeframe="1hr"):
             crash_percent, price_str = await get_crash_stats()
             logger.info(f"Received crash stats: {crash_percent}%, {price_str}")
 
+            # Generate appropriate roast based on crash percentage
             if crash_percent is not None and price_str is not None:
                 if crash_percent >= 90:
                     roast = f"DOWN {crash_percent:.1f}%! ({price_str}) COMPLETE RUGPULL"
@@ -85,11 +87,11 @@ async def generate_meme(timeframe="1hr"):
             else:
                 roast = "LUX IS DEAD! COMPLETE RUGPULL"
 
-            # Add text with outline - repositioned higher up
+            # Add text with outline - positioned at the top
             text_color = 'white'
             outline_color = 'black'
             outline_width = 2
-            text_pos = (20, 10)  # Y coordinate reduced from 20 to 10
+            text_pos = (20, 10)  # Y coordinate at 10 for top positioning
 
             logger.info(f"Adding text overlay: {roast}")
             # Draw outline
