@@ -2,11 +2,15 @@ import os
 import base64
 import io
 import json
+import requests
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 
 # Initialize OpenAI client
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("No OpenAI API key found in environment variables!")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 def generate_roast():
@@ -30,20 +34,19 @@ def generate_roast():
             ],
             response_format={"type": "json_object"}
         )
-        print(f"OpenAI Raw Response: {response}")  # Debug full response
-        print(f"Response Content: {response.choices[0].message.content}")  # Debug content
+
+        print(f"OpenAI Response Content: {response.choices[0].message.content}")  # Debug content
+
         try:
-            # Verify JSON parsing
             json_response = json.loads(response.choices[0].message.content)
-            print(f"Parsed JSON: {json_response}")  # Debug parsed JSON
             if 'roast' not in json_response:
                 raise ValueError("Response missing 'roast' field")
-            return response.choices[0].message.content
+            return json_response['roast']  # Return just the roast text
         except json.JSONDecodeError as je:
             print(f"JSON Parse Error: {str(je)}")
             raise
     except Exception as e:
-        print(f"Error in generate_roast: {str(e)}")  # Add logging
+        print(f"Error in generate_roast: {str(e)}")
         raise Exception(f"Failed to generate roast: {e}")
 
 def generate_meme_image(roast_text):
@@ -55,16 +58,20 @@ def generate_meme_image(roast_text):
             n=1,
             size="1024x1024"
         )
+
+        if not response.data or not response.data[0].url:
+            raise ValueError("No image URL in DALL-E response")
+
         return response.data[0].url
     except Exception as e:
-        print(f"Error in generate_meme_image: {str(e)}")  # Add logging
+        print(f"Error in generate_meme_image: {str(e)}")
         raise Exception(f"Failed to generate image: {e}")
 
 def add_text_to_image(image_url, roast_text):
     """Add the roast text to the generated image."""
     try:
-        # Download the image
-        response = client.http_client.get(image_url)
+        # Download the image using requests
+        response = requests.get(image_url)
         if response.status_code != 200:
             raise Exception(f"Failed to download image: Status code {response.status_code}")
 
@@ -76,33 +83,58 @@ def add_text_to_image(image_url, roast_text):
         # Calculate text size and position
         width, height = img.size
         font_size = int(width * 0.05)  # Scale font size with image
-        try:
-            font = ImageFont.truetype("Arial", font_size)
-        except:
-            font = ImageFont.load_default()
 
-        # Add text with outline for better visibility
-        text_width = draw.textlength(roast_text, font=font)
-        x = (width - text_width) / 2
-        y = height * 0.85  # Position text near bottom
+        # Just use the default font - more reliable across systems
+        font = ImageFont.load_default()
 
-        # Draw text outline
+        # Calculate text width and wrap text if needed
+        words = roast_text.split()
+        lines = []
+        current_line = []
+
+        for word in words:
+            current_line.append(word)
+            test_line = ' '.join(current_line)
+            # For default font, approximate width calculation
+            text_width = len(test_line) * (font_size * 0.6)  
+            if text_width > width * 0.9:  # 90% of image width
+                if len(current_line) > 1:
+                    current_line.pop()
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    lines.append(test_line)
+                    current_line = []
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Draw text with outline
+        y = height * 0.85  # Start position
         outline_color = "black"
+        text_color = "white"
         outline_width = 2
-        for adj in range(-outline_width, outline_width+1):
-            for adj2 in range(-outline_width, outline_width+1):
-                draw.text((x+adj, y+adj2), roast_text, font=font, fill=outline_color)
 
-        # Draw main text
-        draw.text((x, y), roast_text, font=font, fill="white")
+        for line in lines:
+            # Center the text
+            text_width = len(line) * (font_size * 0.6)
+            x = (width - text_width) / 2
+
+            # Draw outline
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    draw.text((x + dx, y + dy), line, font=font, fill=outline_color)
+
+            # Draw text
+            draw.text((x, y), line, font=font, fill=text_color)
+            y += font_size * 1.2  # Move to next line
 
         # Save to bytes
         img_byte_arr = io.BytesIO()
         img.save(img_byte_arr, format='PNG')
         img_byte_arr.seek(0)
-
         return img_byte_arr
 
     except Exception as e:
-        print(f"Error in add_text_to_image: {str(e)}")  # Add logging
+        print(f"Error in add_text_to_image: {str(e)}")
         raise Exception(f"Failed to add text to image: {e}")

@@ -41,11 +41,8 @@ async def roast_lux(ctx):
 
         # Generate roast text
         try:
-            roast_response = generate_roast()
-            print(f"Roast Response: {roast_response}")  # Debug log
-            roast_data = json.loads(roast_response)
-            roast_text = roast_data['roast']
-            print(f"Extracted roast text: {roast_text}")  # Debug log
+            roast_text = generate_roast()  # Now returns just the roast text
+            print(f"Generated roast text: {roast_text}")  # Debug log
         except Exception as e:
             print(f"Error generating roast: {str(e)}")
             await status_message.edit(content="Failed to generate roast text. Please try again later. 😢")
@@ -54,6 +51,7 @@ async def roast_lux(ctx):
         # Generate meme image
         try:
             image_url = generate_meme_image(roast_text)
+            print(f"Generated image URL: {image_url}")  # Debug log
         except Exception as e:
             print(f"Error generating meme image: {str(e)}")
             await status_message.edit(content="Failed to generate meme image. Please try again later. 😢")
@@ -73,7 +71,7 @@ async def roast_lux(ctx):
 
     except Exception as e:
         print(f"Unexpected error in roast command: {str(e)}")
-        await ctx.send(f"Oops! Something unexpected went wrong. Please try again later. 😢")
+        await ctx.send("Oops! Something unexpected went wrong. Please try again later. 😢")
 
 @bot.command(name='commands')
 async def show_commands(ctx):
