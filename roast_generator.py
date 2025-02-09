@@ -1,7 +1,6 @@
 import os
 import random
 from openai import OpenAI
-from price_chart import fetch_current_price
 import logging
 
 # Set up logging
@@ -21,31 +20,9 @@ FALLBACK_ROASTS = [
     "Your investment's more fucked than Death Row Records! Pure Garbage! ⚰️💀"
 ]
 
-def get_price_roast():
-    """Generate a price-specific roast based on current performance."""
-    try:
-        price, change = fetch_current_price()
-        if price < 0.01:  # Changed threshold to be more realistic
-            return f"LUX worth less than NWA's first demo tape! ${price:.4f} - Pure Garbage! 💀"
-        elif change < -5:  # More realistic threshold for negative change
-            return f"Down BAD! LUX getting destroyed like it's on Death Row! Complete Trash! ⚰️"
-        return None
-    except Exception as e:
-        logger.error(f"Error getting price roast: {str(e)}")
-        return None
-
 def generate_roast(max_retries=3):
     """Generate a creative roast about Lux coin using OpenAI."""
     try:
-        # Try to get a price-based roast first
-        price_roast = get_price_roast()
-        if price_roast:
-            logger.info(f"Using price-based roast: {price_roast}")
-            return price_roast
-
-        # Get current price for context
-        price, change = fetch_current_price()
-
         for attempt in range(max_retries):
             try:
                 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024
@@ -58,7 +35,7 @@ def generate_roast(max_retries=3):
                         },
                         {
                             "role": "user",
-                            "content": f"Generate a savage roast about Lux coin. Current price: ${price:.4f}, 24h change: {change}%"
+                            "content": "Generate a savage roast about Lux coin."
                         }
                     ],
                     max_tokens=50,

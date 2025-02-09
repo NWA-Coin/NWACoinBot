@@ -3,10 +3,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import logging
-import asyncio
-from aiohttp import web
-from price_chart import generate_price_chart
-from roast_generator import generate_roast
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(
@@ -28,27 +25,20 @@ intents.message_content = True  # Required for responding to messages
 intents.guild_messages = True   # Required for guild messages
 intents.guilds = True          # Required for guild/server join
 
-# Create bot instance with command prefix
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
-    description='LUX Price Bot - Use !help to see available commands'
+    description='LUX Roast Bot - Use !help to see available commands'
 )
 
-async def start_http_server():
-    """Start a simple HTTP server for health checks."""
-    try:
-        app = web.Application()
-        async def health_check(request):
-            return web.Response(text="Bot is running")
-        app.router.add_get('/', health_check)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 5000)
-        await site.start()
-        logger.info("HTTP server started on port 5000")
-    except Exception as e:
-        logger.error(f"Failed to start HTTP server: {str(e)}")
+# Predefined roasts for initial testing
+ROASTS = [
+    "LUX just got more rekt than Eazy-E's competition! You Got Nothing! 🎤💥",
+    "Straight Outta Value! LUX dropping harder than NWA's basslines! 🎤💀",
+    "Even Ice Cube thinks LUX's price is too cold! Complete Garbage! 🧊💸",
+    "Down so bad even Dr. Dre can't mix this shit right! Complete Trash! 🎧📉",
+    "Your investment's more fucked than Death Row Records! Pure Garbage! ⚰️💀"
+]
 
 @bot.event
 async def on_ready():
@@ -61,9 +51,6 @@ async def on_ready():
         # Print invite link
         logger.info('\nInvite link:')
         logger.info(f'https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=2048&scope=bot%20applications.commands')
-
-        # Start HTTP server for health checks
-        bot.loop.create_task(start_http_server())
     except Exception as e:
         logger.error(f"Error in on_ready: {str(e)}")
 
@@ -78,40 +65,13 @@ async def on_command_error(ctx, error):
         logger.error(f"Command error: {str(error)}")
         await ctx.send("❌ An error occurred. Please try again!")
 
-@bot.command(name='lux', help='Shows current LUX token price with 24h change')
-async def lux_price(ctx):
-    """Show current LUX token price."""
-    logger.info(f"Processing !lux command from {ctx.author}")
-
-    try:
-        async with ctx.typing():
-            # Send initial message
-            message = await ctx.send("📊 Generating price chart...")
-
-            # Generate and send price chart
-            chart_buffer = generate_price_chart()
-            if chart_buffer:
-                await ctx.send(
-                    "💰 LUX Price Chart:",
-                    file=discord.File(fp=chart_buffer, filename='lux_price.png')
-                )
-                chart_buffer.close()
-                await message.delete()  # Remove the "generating" message
-            else:
-                await message.edit(content="❌ Failed to generate price chart. Please try again later!")
-    except Exception as e:
-        logger.error(f"Error in lux command: {str(e)}")
-        await ctx.send("❌ Something went wrong. Please try again later!")
-
-@bot.command(name='roast', help='Get a witty, AI-generated roast about Lux coin')
+@bot.command(name='roast', help='Get a savage roast about LUX')
 async def roast_command(ctx):
-    """Generate a roast about Lux coin."""
-    logger.info(f"Processing !roast command from {ctx.author}")
-
+    """Generate a roast about LUX."""
     try:
-        async with ctx.typing():
-            roast = generate_roast()
-            await ctx.send(roast)
+        import random
+        roast = random.choice(ROASTS)
+        await ctx.send(roast)
     except Exception as e:
         logger.error(f"Error in roast command: {str(e)}")
         await ctx.send("❌ Failed to generate roast. Please try again!")
