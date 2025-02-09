@@ -44,8 +44,8 @@ FALLBACK_ROASTS = [
 async def get_crash_stats():
     """Get crash stats for roast."""
     try:
-        dates, prices = await get_lux_price_history()
-        if dates and prices:
+        _, prices, _ = await get_lux_price_history()
+        if prices:
             entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
             crash_percent = ((entry_price - current_price) / entry_price) * 100
