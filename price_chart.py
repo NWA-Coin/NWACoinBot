@@ -25,7 +25,11 @@ async def get_lux_price_history(timeframe="1hr"):
         timestamps, prices, candles = await fetch_lux_market_data(timeframe)
 
         if timestamps and prices and candles:
-            logger.info("Successfully retrieved live market data")
+            logger.info(f"Successfully retrieved {len(prices)} price points")
+            logger.info(f"Latest price: ${prices[-1]:.6f}")
+            logger.info(f"First timestamp: {datetime.fromtimestamp(timestamps[0]/1000).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Last timestamp: {datetime.fromtimestamp(timestamps[-1]/1000).strftime('%Y-%m-%d %H:%M:%S')}")
+
             if await validate_price_data(timestamps, prices, candles):
                 return timestamps, prices, candles
             else:
