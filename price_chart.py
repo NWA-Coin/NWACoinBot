@@ -74,6 +74,8 @@ async def create_price_chart(timeframe="1hr"):
         width = 1280
         height = 720
         padding = 80  # Base padding
+        top_padding = 100  # Extra padding for top text
+        bottom_padding = 100  # Extra padding for bottom text
 
         # Create image with dark theme
         img = Image.new('RGB', (width, height), '#1E2124')
@@ -81,7 +83,7 @@ async def create_price_chart(timeframe="1hr"):
 
         # Calculate chart dimensions
         chart_width = width - (2 * padding)
-        chart_height = height - (2 * padding)
+        chart_height = height - (top_padding + bottom_padding)  # Adjusted height for extra padding
 
         # Calculate price range with padding
         max_price = max(prices) * 1.02  # Add 2% padding
@@ -102,7 +104,7 @@ async def create_price_chart(timeframe="1hr"):
         # Draw horizontal grid lines and price labels
         for i in range(6):
             price = min_price + (i * (price_range / 5))
-            y = padding + ((max_price - price) * chart_height / price_range)
+            y = top_padding + ((max_price - price) * chart_height / price_range)
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=font)
@@ -112,15 +114,15 @@ async def create_price_chart(timeframe="1hr"):
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
             timestamp = timestamps[0] + (i * (timestamps[-1] - timestamps[0]) / (num_labels - 1))
-            draw.line([(x, padding), (x, height - padding)], fill=grid_color)
+            draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
             time_str = format_time_label(timestamp)
-            draw.text((x - 25, height - padding + 10), time_str, fill=label_color, font=font)
+            draw.text((x - 25, height - bottom_padding + 20), time_str, fill=label_color, font=font)
 
         # Draw price line
         points = []
         for timestamp, price in zip(timestamps, prices):
             x = padding + ((timestamp - timestamps[0]) * chart_width / (timestamps[-1] - timestamps[0]))
-            y = padding + ((max_price - price) * chart_height / price_range)
+            y = top_padding + ((max_price - price) * chart_height / price_range)
             points.append((x, y))
 
         if len(points) > 1:
