@@ -228,17 +228,17 @@ async def crash(ctx):
             entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
             crash_percent = ((entry_price - current_price) / entry_price) * 100
-            price_in_cents = current_price * 100
+            price_str = format_price_label(current_price)
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
-                f"Current Price: {price_in_cents:.2f}¢\n"  # Updated to 2 decimal places
-                f"Entry Price: 1.50¢\n"  # Updated formatting
+                f"Current Price: {price_str}\n"
+                f"Entry Price: 1.50¢\n"
                 f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
             )
 
             await ctx.send(crash_message)
-            logger.info(f"Sent crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.2f}¢")
+            logger.info(f"Sent crash stats: {crash_percent:.1f}% down, price: {price_str}")
         else:
             await ctx.send("💥 LUX CRASH UPDATE 💥\nPrice too low to calculate! Complete rugpull! 💀")
             logger.warning("Using fallback crash message due to missing price data")
@@ -293,3 +293,8 @@ if __name__ == "__main__":
             restart_delay = min(restart_delay * 1.5, 30)
             last_restart = current_time
             continue
+
+def format_price_label(price):
+    """Formats the price for display,  assuming this function exists elsewhere"""
+    price_in_cents = price * 100
+    return f"{price_in_cents:.2f}¢"

@@ -2,7 +2,7 @@ import os
 import random
 from datetime import datetime
 import logging
-from price_chart import create_price_chart, get_lux_price_history
+from price_chart import create_price_chart, get_lux_price_history, format_price_label
 from PIL import Image, ImageDraw, ImageFont
 import aiohttp
 import asyncio
@@ -23,9 +23,9 @@ async def get_crash_stats():
             entry_price = 0.015  # NWA entry price
             current_price = prices[-1]
             crash_percent = ((entry_price - current_price) / entry_price) * 100
-            price_in_cents = current_price * 100
-            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.2f}¢")
-            return crash_percent, price_in_cents
+            price_str = format_price_label(current_price)  # Use consistent price formatting
+            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_str}")
+            return crash_percent, price_str
         logger.warning("No price data available for crash stats")
         return None, None
     except Exception as e:
@@ -68,18 +68,18 @@ async def generate_meme(timeframe="1hr"):
 
             # Get crash stats for roast
             logger.info("Getting crash stats for roast")
-            crash_percent, price_in_cents = await get_crash_stats()
-            logger.info(f"Received crash stats: {crash_percent}%, {price_in_cents}¢")
+            crash_percent, price_str = await get_crash_stats()
+            logger.info(f"Received crash stats: {crash_percent}%, {price_str}")
 
-            if crash_percent is not None and price_in_cents is not None:
+            if crash_percent is not None and price_str is not None:
                 if crash_percent >= 90:
-                    roast = f"DOWN {crash_percent:.1f}%! ({price_in_cents:.2f}¢) COMPLETE RUGPULL"
+                    roast = f"DOWN {crash_percent:.1f}%! ({price_str}) COMPLETE RUGPULL"
                 elif crash_percent >= 70:
-                    roast = f"DUMPED {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO IN SHAMBLES"
+                    roast = f"DUMPED {crash_percent:.1f}%! ({price_str}) TINO IN SHAMBLES"
                 elif crash_percent >= 50:
-                    roast = f"CRASHING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) NWA WINS AGAIN"
+                    roast = f"CRASHING {crash_percent:.1f}%! ({price_str}) NWA WINS AGAIN"
                 else:
-                    roast = f"DUMPING {crash_percent:.1f}%! ({price_in_cents:.2f}¢) TINO'S REPUTATION"
+                    roast = f"DUMPING {crash_percent:.1f}%! ({price_str}) TINO'S REPUTATION"
             else:
                 roast = "LUX IS DEAD! COMPLETE RUGPULL"
 

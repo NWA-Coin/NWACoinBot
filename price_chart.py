@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pytz
+import math  # Added for floor/ceil functions
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -157,6 +158,42 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.exception("Full traceback:")
         return None, None, None
 
+def format_price_label(price):
+    """Format price in cents with appropriate scaling."""
+    cents = price * 100  # Convert to cents
+    if cents >= 1:
+        return f"{cents:.2f}¢"
+    elif cents >= 0.1:
+        return f"{cents:.3f}¢"
+    else:
+        return f"{cents:.4f}¢"
+
+def get_nice_scale_interval(min_val, max_val):
+    """Calculate a nice scale interval for the Y-axis."""
+    range_in_cents = (max_val - min_val) * 100
+    logger.info(f"Price range in cents: {range_in_cents:.4f}")
+
+    # Define standard intervals in cents
+    standard_intervals = [0.0001, 0.0002, 0.0005, 
+                         0.001, 0.002, 0.005,
+                         0.01, 0.02, 0.05,
+                         0.1, 0.2, 0.5,
+                         1.0, 2.0, 5.0]
+
+    # Target around 5-7 intervals on the axis
+    target_divisions = 6
+    raw_interval = range_in_cents / target_divisions
+    logger.info(f"Raw interval: {raw_interval:.4f} cents")
+
+    # Find the closest standard interval
+    for interval in standard_intervals:
+        if interval > raw_interval:
+            logger.info(f"Selected interval: {interval:.4f} cents")
+            return interval / 100  # Convert back to decimal
+
+    logger.info(f"Using maximum interval: {standard_intervals[-1]:.4f} cents")
+    return standard_intervals[-1] / 100
+
 async def create_price_chart(timeframe="1hr"):
     """Create a traditional candlestick chart with clear visuals."""
     try:
@@ -186,6 +223,14 @@ async def create_price_chart(timeframe="1hr"):
         min_price = min(low_prices) * 0.98
         price_range = max_price - min_price
 
+        # Get a nice interval for the scale
+        interval = get_nice_scale_interval(min_price, max_price)
+
+        # Adjust min and max to nice values
+        min_price = math.floor(min_price / interval) * interval
+        max_price = math.ceil(max_price / interval) * interval
+        price_range = max_price - min_price
+
         # Load fonts
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
@@ -199,13 +244,22 @@ async def create_price_chart(timeframe="1hr"):
         grid_color = '#2F3136'
         label_color = '#FFFFFF'
 
+        # Calculate number of intervals to show
+        num_intervals = int(price_range / interval)
+
         # Draw horizontal grid lines and price labels
-        for i in range(6):
-            y = padding + (i * chart_height // 5)
-            draw.line([(padding, y), (width-padding, y)], fill=grid_color, width=1)
-            price = max_price - (i * price_range / 5)
-            price_str = f"${price:.6f}"
-            draw.text((10, y-10), price_str, fill=label_color, font=small_font)
+        for i in range(num_intervals + 1):
+            price = min_price + (i * interval)
+            y = padding + ((max_price - price) * chart_height / price_range)
+
+            # Only draw if within chart bounds
+            if padding <= y <= height - padding:
+                draw.line([(padding, y), (width-padding, y)], fill=grid_color, width=1)
+                price_str = format_price_label(price)
+                # Calculate text width for right alignment
+                text_bbox = draw.textbbox((0, 0), price_str, font=small_font)
+                text_width = text_bbox[2] - text_bbox[0]
+                draw.text((padding - text_width - 5, y-10), price_str, fill=label_color, font=small_font)
 
         # Draw vertical grid lines and time labels
         num_vert_lines = 8
@@ -265,13 +319,6 @@ async def create_price_chart(timeframe="1hr"):
             except Exception as e:
                 logger.error(f"Error drawing candle {i}: {str(e)}")
                 continue
-
-        # Add title with centering
-        title = f"LUX/USD {timeframe} Chart"
-        title_bbox = draw.textbbox((0, 0), title, font=font)
-        title_width = title_bbox[2] - title_bbox[0]
-        title_x = (width - title_width) // 2
-        draw.text((title_x, 20), title, fill=label_color, font=font)
 
         # Save chart
         try:
