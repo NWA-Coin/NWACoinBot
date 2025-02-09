@@ -237,29 +237,29 @@ async def crash(ctx):
     logger.info(f'Executing crash command for {ctx.author}')
     try:
         await update_bot_status()  # Set online immediately
-        await ctx.send("💥 Fetching latest LUX crash data...")
+        message = await ctx.send("💥 Fetching latest LUX crash data...")
 
         logger.info("Attempting to fetch price history")
-        dates, prices, _ = await get_lux_price_history()  # Ignore candles
+        timestamps, prices = await get_lux_price_history()  # Update to match new return signature
 
-        if dates and prices:
+        if timestamps and prices:
             current_price = prices[-1]
-            crash_percent = ((0.015 - current_price) / 0.015) * 100
             price_str = format_price_label(current_price)
+            crash_percent = ((0.015 - current_price) / 0.015) * 100  # Calculate crash percentage
 
             logger.info(f"Successfully fetched price data - Current: {price_str}, Down: {crash_percent:.1f}%")
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
                 f"Current Price: {price_str}\n"
-                f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
+                f"Down {crash_percent:.1f}%! Complete rugpull! 💀"
             )
 
-            await ctx.send(crash_message)
+            await message.edit(content=crash_message)
             logger.info(f"Sent crash stats: {crash_percent:.1f}% down, price: {price_str}")
         else:
-            logger.error("Failed to fetch price data - dates or prices is None")
-            await ctx.send("💥 LUX CRASH UPDATE 💥\nPrice too low to calculate! Complete rugpull! 💀")
+            logger.error("Failed to fetch price data - no valid data returned")
+            await message.edit(content="💥 LUX CRASH UPDATE 💥\nPrice too low to calculate! Complete rugpull! 💀")
     except Exception as e:
         logger.error(f"Error in crash command: {str(e)}")
         logger.exception("Full traceback:")

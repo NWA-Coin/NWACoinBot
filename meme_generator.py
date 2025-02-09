@@ -14,9 +14,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger('discord_bot')
 
-# NWA entry price constant
-NWA_ENTRY_PRICE = 0.015  # 1.5 cents entry price
-
 async def get_crash_stats():
     """Get crash stats for roast."""
     try:
@@ -24,7 +21,7 @@ async def get_crash_stats():
         dates, prices, _ = await get_lux_price_history()  # Correctly unpack three values
         if dates and prices:
             current_price = prices[-1]
-            crash_percent = ((NWA_ENTRY_PRICE - current_price) / NWA_ENTRY_PRICE) * 100
+            crash_percent = ((0.015 - current_price) / 0.015) * 100
             price_str = format_price_label(current_price)  # Use consistent price formatting
             logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_str}")
             return crash_percent, price_str
@@ -40,10 +37,9 @@ async def generate_meme(timeframe="1hr"):
     try:
         logger.info("Starting price chart meme generation")
 
-        # Generate candlestick chart with NWA entry price line for memes
+        # Generate candlestick chart
         logger.info(f"Calling create_price_chart with timeframe {timeframe}")
-        # Always include NWA entry price line for meme command
-        chart_path = await create_price_chart(timeframe, use_nwa_price=True)
+        chart_path = await create_price_chart(timeframe)
         logger.info(f"Received chart path: {chart_path}")
 
         if not chart_path:
