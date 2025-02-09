@@ -1,12 +1,9 @@
 [project]
-name = "repl-nix-workspace"
+name = "lux-roast-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple Discord bot for roasting Lux coin"
 requires-python = ">=3.11"
 dependencies = [
-    "discord-py>=2.4.0",
-    "openai>=1.61.1",
-    "pillow>=11.1.0",
+    "discord.py>=2.4.0",
     "python-dotenv>=1.0.1",
-    "requests>=2.32.3",
 ]

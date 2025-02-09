@@ -1,29 +1,40 @@
 import os
+import random
 import discord
 from discord.ext import commands
-import json
-from openai_integration import generate_roast, generate_meme_image, add_text_to_image
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Bot setup with all privileged intents
+# Bot setup with minimal required intents
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # Enable members intent
-intents.presences = True  # Enable presence intent
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Predefined roast messages
+ROASTS = [
+    "Lux coin is so slow, even Internet Explorer feels fast! 🐌",
+    "Lux's market cap is smaller than my coffee budget! ☕",
+    "Lux coin has more forks than a restaurant supply store! 🍴",
+    "Lux's roadmap is like my GPS - always 'recalculating'! 🗺️",
+    "Lux coin is so volatile, roller coasters look stable! 🎢",
+    "Lux's white paper has more plot twists than a soap opera! 📺",
+    "Investing in Lux is like trying to catch falling knives... blindfolded! 🔪",
+    "Lux coin updates slower than my grandma's internet! 👵",
+    "Lux's code has more bugs than a summer picnic! 🐜",
+    "Lux coin makes Internet Explorer look cutting edge! 💻"
+]
 
 @bot.event
 async def on_ready():
+    """Called when the bot is ready."""
     print(f'{bot.user} has connected to Discord!')
-    print('Ready to roast some Lux!')
+    print('Bot is ready to roast!')
 
-    # Generate invite link with necessary permissions
+    # Generate invite link
     permissions = discord.Permissions()
     permissions.send_messages = True
-    permissions.attach_files = True
     permissions.read_messages = True
 
     invite_link = discord.utils.oauth_url(
@@ -34,52 +45,21 @@ async def on_ready():
 
 @bot.command(name='roast')
 async def roast_lux(ctx):
-    """Generate and send a meme roasting Lux coin."""
+    """Send a random roast about Lux coin."""
     try:
-        # Send initial message
-        status_message = await ctx.send("Generating a spicy meme about Lux... 🔥")
-
-        # Generate roast text
-        try:
-            roast_text = generate_roast()  # Now returns just the roast text
-            print(f"Generated roast text: {roast_text}")  # Debug log
-        except Exception as e:
-            print(f"Error generating roast: {str(e)}")
-            await status_message.edit(content="Failed to generate roast text. Please try again later. 😢")
-            return
-
-        # Generate meme image
-        try:
-            image_url = generate_meme_image(roast_text)
-            print(f"Generated image URL: {image_url}")  # Debug log
-        except Exception as e:
-            print(f"Error generating meme image: {str(e)}")
-            await status_message.edit(content="Failed to generate meme image. Please try again later. 😢")
-            return
-
-        # Add text to image
-        try:
-            meme_image = add_text_to_image(image_url, roast_text)
-        except Exception as e:
-            print(f"Error adding text to image: {str(e)}")
-            await status_message.edit(content="Failed to create the final meme. Please try again later. 😢")
-            return
-
-        # Send the meme and update status message
-        await ctx.send(file=discord.File(meme_image, filename='lux_roast.png'))
-        await status_message.delete()
-
+        roast = random.choice(ROASTS)
+        await ctx.send(f"🔥 {roast}")
     except Exception as e:
-        print(f"Unexpected error in roast command: {str(e)}")
-        await ctx.send("Oops! Something unexpected went wrong. Please try again later. 😢")
+        print(f"Error in roast command: {str(e)}")
+        await ctx.send("Oops! Something went wrong. Please try again later! 😢")
 
 @bot.command(name='commands')
 async def show_commands(ctx):
     """Show available commands."""
     help_text = """
 **Available Commands:**
-`!roast` - Generate a meme roasting Lux coin
-`!commands` - Show this help message
+`!roast` - Get a random roast about Lux coin
+`!commands` - Show this command list
     """
     await ctx.send(help_text)
 
