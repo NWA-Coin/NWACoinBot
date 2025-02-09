@@ -24,9 +24,16 @@ if not TOKEN:
 
 # Bot setup with required intents
 intents = discord.Intents.default()
-intents.message_content = True
-intents.guild_messages = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+intents.message_content = True  # Required for responding to messages
+intents.guild_messages = True   # Required for guild messages
+intents.guilds = True          # Required for guild/server join
+
+# Create bot instance with command prefix
+bot = commands.Bot(
+    command_prefix='!',
+    intents=intents,
+    description='LUX Price Bot - Use !help to see available commands'
+)
 
 async def start_http_server():
     """Start a simple HTTP server for health checks."""
@@ -71,7 +78,7 @@ async def on_command_error(ctx, error):
         logger.error(f"Command error: {str(error)}")
         await ctx.send("❌ An error occurred. Please try again!")
 
-@bot.command(name='lux', help="Show current LUX token price with 24h change")
+@bot.command(name='lux', help='Shows current LUX token price with 24h change')
 async def lux_price(ctx):
     """Show current LUX token price."""
     logger.info(f"Processing !lux command from {ctx.author}")
@@ -79,7 +86,7 @@ async def lux_price(ctx):
     try:
         async with ctx.typing():
             # Send initial message
-            await ctx.send("📊 Generating price chart...")
+            message = await ctx.send("📊 Generating price chart...")
 
             # Generate and send price chart
             chart_buffer = generate_price_chart()
@@ -89,13 +96,14 @@ async def lux_price(ctx):
                     file=discord.File(fp=chart_buffer, filename='lux_price.png')
                 )
                 chart_buffer.close()
+                await message.delete()  # Remove the "generating" message
             else:
-                await ctx.send("❌ Failed to generate price chart. Please try again later!")
+                await message.edit(content="❌ Failed to generate price chart. Please try again later!")
     except Exception as e:
         logger.error(f"Error in lux command: {str(e)}")
         await ctx.send("❌ Something went wrong. Please try again later!")
 
-@bot.command(name='roast', help="Get a witty, AI-generated roast about Lux coin")
+@bot.command(name='roast', help='Get a witty, AI-generated roast about Lux coin')
 async def roast_command(ctx):
     """Generate a roast about Lux coin."""
     logger.info(f"Processing !roast command from {ctx.author}")
