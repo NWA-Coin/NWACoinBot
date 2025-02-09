@@ -7,8 +7,14 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import time
 
-# Set up logging
+# Set up logging with more detailed format
 logger = logging.getLogger('discord_bot')
+logger.setLevel(logging.DEBUG) # Ensure debug messages are logged
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 
 def get_lux_price_history():
     """Get LUX price history from CoinGecko."""
@@ -28,8 +34,10 @@ def get_lux_price_history():
                 "precision": "full"  # Get full precision for small numbers
             }
 
+            logger.info(f"Making API request to: {url}")
             response = requests.get(url, params=params, timeout=10)
             logger.info(f"API Response Status: {response.status_code}")
+            logger.debug(f"API Response Headers: {response.headers}")
 
             if response.status_code == 429:
                 logger.warning("Rate limited by CoinGecko API")
@@ -55,7 +63,7 @@ def get_lux_price_history():
                 logger.error(f"Invalid API response format: {data}")
                 return generate_mock_data()
 
-            # Extract price data points
+            # Extract price data points with enhanced logging
             prices = [p[1] for p in data['prices']]
             dates = [datetime.fromtimestamp(p[0]/1000) for p in data['prices']]
 
@@ -65,6 +73,7 @@ def get_lux_price_history():
 
             logger.info(f"Successfully fetched {len(prices)} price points")
             logger.info(f"Price range: ${min(prices):.8f} - ${max(prices):.8f}")
+            logger.info(f"Date range: {dates[0]} - {dates[-1]}")
             return dates, prices
 
         except requests.exceptions.Timeout:
@@ -75,7 +84,8 @@ def get_lux_price_history():
             return generate_mock_data()
 
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.error(f"Unexpected error in get_lux_price_history: {str(e)}")
+            logger.exception("Full traceback:")
             return generate_mock_data()
 
     logger.error("All attempts failed")
