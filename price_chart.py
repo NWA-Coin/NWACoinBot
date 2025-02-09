@@ -120,42 +120,57 @@ def generate_price_chart():
         current_price, change = fetch_current_price()
         timestamps, prices = fetch_historical_prices()
 
+        # Convert prices to cents for better readability
+        prices_in_cents = [price * 100 for price in prices]
+        current_price_cents = current_price * 100
+
+        # Set dark theme
+        plt.style.use('dark_background')
+
         # Create figure with two subplots
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), gridspec_kw={'height_ratios': [2, 1]})
+        fig.patch.set_facecolor('#1E1E1E')  # Dark background
 
         # Plot historical prices
-        ax1.plot(timestamps, prices, 'r-', linewidth=2, label='Price (USD)')
-        ax1.set_yscale('log')  # Log scale for better visualization of small values
-        ax1.grid(True, which="both", ls="-", alpha=0.2)
-        ax1.set_title("LUX Price History (Logarithmic Scale)", color='red', fontsize=14)
-        ax1.tick_params(axis='y', labelcolor='red')
+        ax1.plot(timestamps, prices_in_cents, '#FF4444', linewidth=2, label='Price (cents)')
+        ax1.grid(True, which="both", ls="-", alpha=0.2, color='gray')
+        ax1.set_facecolor('#2D2D2D')  # Slightly lighter dark background
 
-        # Rotate x-axis labels for better readability
-        plt.setp(ax1.get_xticklabels(), rotation=45)
+        # Format x-axis to show dates nicely
+        ax1.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y-%m-%d'))
+        plt.setp(ax1.get_xticklabels(), rotation=45, color='white')
+        plt.setp(ax1.get_yticklabels(), color='white')
+
+        # Set titles and labels with white text
+        ax1.set_title("LUX Price History (Last 7 Days)", color='white', fontsize=14, pad=20)
+        ax1.set_xlabel("Date", color='white', fontsize=12)
+        ax1.set_ylabel("Price (cents)", color='white', fontsize=12)
 
         # Add price summary text
         summary_text = (
             f"Current Price: ${current_price:.12f}\n"
+            f"Price in Cents: {current_price_cents:.6f}¢\n"
             f"24h Change: {change:+.2f}% 🚮"
         )
         ax2.text(0.5, 0.7, summary_text, 
                 horizontalalignment='center', 
                 fontsize=16, 
-                color='red',
+                color='#FF4444',
                 fontweight='bold')
+        ax2.set_facecolor('#2D2D2D')
 
         # Add NWA-themed roast based on performance
         if change < -10 or change == -99.99:
-            roast = "Straight Outta Profits!\nDown Bad Like MC Ren's Solo Career! 💀🎤"
-        elif current_price < 0.0001:
-            roast = "Worth Less Than A Bootleg NWA Tape\nFrom Compton Swap Meet! 📼💀"
+            roast = "Straight Outta Value!\nDown BAD Like NWA's Lost Mixtapes! 💀🎤"
+        elif current_price_cents < 0.01:
+            roast = "Worth Less Than A Bootleg\nNWA Tape From Compton! 📼💀"
         else:
             roast = "More Worthless Than Ice Cube's\nKid Movie Career! 🎬💀"
 
         ax2.text(0.5, 0.3, roast,
                 horizontalalignment='center',
                 fontsize=14,
-                color='red')
+                color='#FF4444')
 
         # Remove axes from bottom subplot
         ax2.axis('off')
@@ -165,7 +180,8 @@ def generate_price_chart():
 
         # Save to buffer
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
+                   facecolor='#1E1E1E', edgecolor='none')
         plt.close(fig)
 
         buffer.seek(0)
@@ -176,16 +192,18 @@ def generate_price_chart():
         logger.error(f"Error generating price chart: {str(e)}")
 
         # Create error message chart with NWA reference
+        plt.style.use('dark_background')
         plt.figure(figsize=(10, 8))
         plt.text(0.5, 0.5,
                 "❌ Failed to Generate Price Chart\nBut LUX Still Weak Like Ice Cube's\nKid Movie Career! 💀🎤",
                 horizontalalignment='center',
                 fontsize=14,
-                color='red')
+                color='#FF4444')
         plt.axis('off')
 
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100,
+                   facecolor='#1E1E1E', edgecolor='none')
         plt.close()
 
         buffer.seek(0)
