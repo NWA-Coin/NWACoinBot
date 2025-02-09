@@ -8,14 +8,11 @@ from meme_generator import generate_meme
 from roast_generator import generate_roast
 from price_chart import get_lux_price_history
 
-# Set up logging
+# Set up logging with a single handler
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log')
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger('discord_bot')
 
@@ -91,18 +88,17 @@ async def meme(ctx):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            await ctx.send("Failed to generate chart! Probably rugpulled to zero! 💀")
+            await ctx.send("Failed to generate chart! LUX price data not found! 📉")
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")
-        await ctx.send("Failed to generate meme! Chart's probably dead like LUX's future! 💀")
+        await ctx.send(f"Failed to generate meme! Error: {str(e)[:100]}... 💀")
 
 @bot.command(name='crash')
 async def crash(ctx):
     """Get current crash stats from price data"""
     logger.info(f'Executing crash command for {ctx.author}')
     try:
-        # Get latest price data
         await ctx.send("💥 Fetching latest LUX crash data...")
         dates, prices = await get_lux_price_history()
         if dates and prices:
@@ -113,7 +109,7 @@ async def crash(ctx):
 
             crash_message = (
                 f"💥 LUX CRASH UPDATE 💥\n"
-                f"Current Price: {price_in_cents:.4f}¢\n"  # Prominently display cents
+                f"Current Price: {price_in_cents:.4f}¢\n"  # Show cents
                 f"Entry Price: 1.5¢\n"  # Added for reference
                 f"Down {crash_percent:.1f}% since NWA entry! Complete rugpull! 💀"
             )

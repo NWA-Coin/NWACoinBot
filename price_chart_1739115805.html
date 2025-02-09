@@ -1,0 +1,50 @@
+
+        <html>
+        <head>
+            <style>
+                body { 
+                    margin: 0; 
+                    background: #2C2F33; 
+                    width: 100vw;
+                    height: 100vh;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                .chart-container { 
+                    width: 1280px;
+                    height: 720px;
+                    background: #2C2F33;
+                }
+            </style>
+        </head>
+        <body>
+            <!-- TradingView Chart Widget BEGIN -->
+            <div class="chart-container">
+                <div id="tradingview_chart"></div>
+                <script type="text/javascript" src="https://s.tradingview.com/tv.js"></script>
+                <script type="text/javascript">
+                    new TradingView.widget({
+                        "width": "100%",
+                        "height": "100%",
+                        "symbol": "KUCOIN:LUXUSDT",  // Using KuCoin chart for better data
+                        "interval": "60",  // 1 hour interval for more detail
+                        "timezone": "Etc/UTC",
+                        "theme": "dark",
+                        "style": "1",  // Candlestick chart
+                        "locale": "en",
+                        "toolbar_bg": "#2C2F33",
+                        "enable_publishing": false,
+                        "hide_legend": true,
+                        "save_image": false,
+                        "container_id": "tradingview_chart",
+                        "hide_volume": true,
+                        "hide_top_toolbar": true,
+                        "hide_side_toolbar": true,
+                    });
+                </script>
+            </div>
+            <!-- TradingView Chart Widget END -->
+        </body>
+        </html>
+        
