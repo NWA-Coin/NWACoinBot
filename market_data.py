@@ -46,7 +46,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                     headers = {}
                     if COINGECKO_API_KEY:
                         headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
-                        logger.info("Using CoinGecko demo API key in headers")
+                        logger.info("Using CoinGecko API key")
 
                     endpoint = f"{COINGECKO_BASE_URL}/coins/{LUX_ID}/market_chart"
                     logger.info(f"Requesting data from {endpoint}")
@@ -57,7 +57,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                             logger.info("Successfully parsed JSON response")
 
                             if not data or "prices" not in data:
-                                logger.error("Invalid response format")
+                                logger.error(f"Invalid response format: {data}")
                                 if retry < MAX_RETRIES - 1:
                                     await asyncio.sleep(RETRY_DELAY * (retry + 1))
                                 continue

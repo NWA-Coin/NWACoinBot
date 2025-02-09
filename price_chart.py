@@ -17,15 +17,17 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.info(f"Fetching live LUX price data for timeframe {timeframe}")
         timestamps, prices, _ = await fetch_lux_market_data(timeframe)
 
-        if timestamps and prices:
+        if timestamps and prices and len(timestamps) > 0 and len(prices) > 0:
             logger.info(f"Successfully retrieved {len(prices)} price points")
             logger.info(f"Latest price: ${prices[-1]:.6f}")
             return timestamps, prices
-        
-        logger.warning("Failed to fetch price data")
+
+        logger.warning("Failed to fetch price data or received empty data")
+        logger.warning(f"Timestamps: {timestamps is not None}, Prices: {prices is not None}")
         return None, None
     except Exception as e:
         logger.error(f"Error in price history retrieval: {str(e)}")
+        logger.exception("Full traceback:")
         return None, None
 
 def format_price_label(price):
@@ -62,8 +64,10 @@ async def create_price_chart(timeframe="1hr"):
         # Get price data
         logger.info(f"Starting price chart generation for timeframe {timeframe}")
         timestamps, prices = await get_lux_price_history(timeframe)
-        if not timestamps or not prices:
-            logger.error("Failed to get price data")
+
+        if not timestamps or not prices or len(timestamps) == 0 or len(prices) == 0:
+            logger.error("Failed to get price data or received empty arrays")
+            logger.error(f"Timestamps: {timestamps}, Prices: {prices}")
             return None, None, None
 
         # Log price data for debugging
