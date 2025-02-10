@@ -21,18 +21,16 @@ def home():
 def run():
     """Run the Flask app"""
     try:
-        # Must use PORT from environment for Replit
-        port = int(os.environ.get('PORT', '8080'))
-        logger.info(f"Starting unified server on port {port}")
+        # Use a different port to avoid conflicts
+        port = int(os.environ.get('PORT', '8090'))
+        logger.info(f"Starting keep-alive server on port {port}")
 
         app.run(
             host='0.0.0.0',  # Required for external access
             port=port,
             debug=False,
-            use_reloader=False,
-            threaded=True
+            use_reloader=False
         )
-        return True
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         logger.exception("Full traceback:")
@@ -62,11 +60,4 @@ def keep_alive():
         return False
 
 if __name__ == "__main__":
-    if keep_alive():
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Server shutting down")
-    else:
-        logger.error("Failed to start server")
+    keep_alive()

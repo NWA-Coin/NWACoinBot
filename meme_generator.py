@@ -45,43 +45,47 @@ async def generate_meme(timeframe="1hr"):
         draw = ImageDraw.Draw(img)
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            # Increase font sizes for better visibility
+            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)  # Increased from 36
+            roast_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)  # Increased from 32
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
-            font = ImageFont.load_default()
+            title_font = roast_font = ImageFont.load_default()
 
         # Create title based on timeframe
         title = f"$LUX {timeframe} Chart"
 
-        # Add text with outline
+        # Text colors and outline settings
         text_color = 'white'
         outline_color = 'black'
-        outline_width = 2
+        outline_width = 3  # Increased from 2 for better visibility
 
-        # Center the title and roast text
-        title_width = draw.textlength(title, font=font)
-        roast_width = draw.textlength(roast, font=font)
+        # Calculate text dimensions for centering
+        title_width = draw.textlength(title, font=title_font)
+        roast_width = draw.textlength(roast, font=roast_font)
+
+        # Calculate text heights (approximate)
+        title_height = title_font.size
+        roast_height = roast_font.size
 
         # Calculate centered positions
         title_x = (img.width - title_width) / 2
         roast_x = (img.width - roast_width) / 2
 
-        # Position for title and roast
-        title_pos = (title_x, 10)
-        roast_pos = (roast_x, 50)
+        # Adjust vertical positioning
+        title_y = 30  # Increased from 20 for better spacing
+        roast_y = title_y + title_height + 20  # Dynamic spacing based on title height
 
-        # Draw outline and text for title
+        # Draw outline for better text visibility
         for dx in range(-outline_width, outline_width+1):
             for dy in range(-outline_width, outline_width+1):
-                if dx != 0 or dy != 0:
-                    draw.text((title_pos[0]+dx, title_pos[1]+dy),
-                            title, font=font, fill=outline_color)
-                    draw.text((roast_pos[0]+dx, roast_pos[1]+dy),
-                            roast, font=font, fill=outline_color)
+                if dx != 0 or dy != 0:  # Skip center position
+                    draw.text((title_x+dx, title_y+dy), title, font=title_font, fill=outline_color)
+                    draw.text((roast_x+dx, roast_y+dy), roast, font=roast_font, fill=outline_color)
 
         # Draw main text
-        draw.text(title_pos, title, font=font, fill=text_color)
-        draw.text(roast_pos, roast, font=font, fill=text_color)
+        draw.text((title_x, title_y), title, font=title_font, fill=text_color)
+        draw.text((roast_x, roast_y), roast, font=roast_font, fill=text_color)
 
         # Save final meme with high quality
         final_path = f"price_meme_{int(datetime.now().timestamp())}.png"

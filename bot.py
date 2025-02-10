@@ -322,7 +322,8 @@ async def main():
     try:
         logger.info("Starting bot initialization...")
 
-        # Start the keep-alive server
+        # Start the keep-alive server in a separate thread
+        logger.info("Starting keep-alive server...")
         if not keep_alive():
             logger.error("Failed to start keep-alive server")
             return

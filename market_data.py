@@ -30,7 +30,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
             "3m": "90"     # 90 days of data
         }
 
-        days = timeframe_map.get(timeframe, "3")
+        days = timeframe_map.get(timeframe, "2")  # Default to 2 days if timeframe not found
         logger.info(f"Fetching {days} days of price data for timeframe {timeframe}")
 
         timeout = aiohttp.ClientTimeout(total=15)
@@ -77,25 +77,24 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                             if timeframe == "1hr":
                                 cutoff_time = int((datetime.now() - timedelta(hours=1)).timestamp() * 1000)
                                 price_data = [p for p in price_data if p[0] >= cutoff_time]
+                                logger.info(f"Filtered to last hour: {len(price_data)} points")
 
-                            logger.info(f"After filtering: {len(price_data)} price points")
+                            # Ensure minimum number of data points
+                            if len(price_data) < 2:
+                                logger.error("Insufficient data points after filtering")
+                                if retry < MAX_RETRIES - 1:
+                                    await asyncio.sleep(RETRY_DELAY * (retry + 1))
+                                continue
 
                             timestamps = []
                             prices = []
 
                             # Process data points
-                            for i in range(0, len(price_data)):
-                                timestamp = int(price_data[i][0])
-                                price = float(price_data[i][1])
-
+                            for point in price_data:
+                                timestamp = int(point[0])
+                                price = float(point[1])
                                 timestamps.append(timestamp)
                                 prices.append(price)
-
-                            if len(timestamps) < 2:
-                                logger.error("Insufficient price data points")
-                                if retry < MAX_RETRIES - 1:
-                                    await asyncio.sleep(RETRY_DELAY * (retry + 1))
-                                continue
 
                             logger.info(f"Successfully processed {len(timestamps)} price points")
                             logger.info(f"Latest price: ${prices[-1]:.6f}")

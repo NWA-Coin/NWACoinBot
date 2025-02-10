@@ -108,14 +108,37 @@ async def create_price_chart(timeframe="1hr"):
             # Load fonts with consistent size for all labels
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
             price_font = time_font  # Use same font for price labels
+            crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)  # Larger for crash text
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
-            time_font = price_font = ImageFont.load_default()
+            time_font = price_font = crash_font = ImageFont.load_default()
 
         # Draw grid and labels with adjusted colors
         grid_color = '#0D3517'  # Slightly lighter green for grid
         label_color = '#FFFFFF'
         line_color = '#FF3333'
+
+        # Calculate crash percentage
+        entry_price = 0.015  # NWA entry price
+        current_price = prices[-1]
+        crash_percent = ((entry_price - current_price) / entry_price) * 100
+
+        # Draw crash percentage in top right corner with improved visibility
+        crash_text = f"Down {crash_percent:.1f}% since NWA takeover"
+        crash_text_width = draw.textlength(crash_text, font=crash_font)
+        crash_x = width - padding - crash_text_width - 20  # More padding from right edge
+        crash_y = 30  # Slightly lower position from top
+
+        # Enhanced outline for better visibility
+        outline_color = 'black'
+        outline_width = 3  # Increased outline width
+        for dx in range(-outline_width, outline_width+1):
+            for dy in range(-outline_width, outline_width+1):
+                if dx != 0 or dy != 0:  # Skip center position
+                    draw.text((crash_x+dx, crash_y+dy), crash_text, font=crash_font, fill=outline_color)
+
+        # Draw main crash text in bright red
+        draw.text((crash_x, crash_y), crash_text, font=crash_font, fill='#FF4444')  # Bright red for emphasis
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
