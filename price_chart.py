@@ -39,8 +39,19 @@ def format_time_label(timestamp, timeframe="1hr"):
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
 
-        # Format with date for all timestamps
-        return eastern_time.strftime("%-m/%-d\n%-I:%M %p")
+        # Round to nearest interval based on timeframe
+        minutes = eastern_time.minute
+        if timeframe == "5m":
+            rounded_minutes = round(minutes / 5) * 5
+        elif timeframe == "15m":
+            rounded_minutes = round(minutes / 15) * 15
+        else:  # 1hr
+            rounded_minutes = 0
+
+        eastern_time = eastern_time.replace(minute=rounded_minutes, second=0, microsecond=0)
+
+        # Format with compact date and clean time
+        return eastern_time.strftime("%-m/%-d\n%-I:%M%p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
@@ -86,10 +97,12 @@ async def create_price_chart(timeframe="1hr"):
         price_range = max_price - min_price
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            # Smaller font for time labels
+            time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+            price_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
-            font = ImageFont.load_default()
+            time_font = price_font = ImageFont.load_default()
 
         # Draw grid and labels
         grid_color = '#2F3136'
@@ -102,15 +115,15 @@ async def create_price_chart(timeframe="1hr"):
             y = top_padding + ((max_price - price) * chart_height / price_range)
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
             price_str = format_price_label(price)
-            draw.text((10, y - 16), price_str, fill=label_color, font=font)
+            draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
 
         # Determine number of time labels based on timeframe
         if timeframe == "5m":
-            num_labels = 12  # Every 30 minutes
+            num_labels = 24  # Every 15 minutes
         elif timeframe == "15m":
-            num_labels = 8   # Hourly
+            num_labels = 16  # Every 30 minutes
         else:  # 1hr
-            num_labels = 6   # Every 4 hours
+            num_labels = 12  # Every hour
 
         # Draw time labels and vertical grid lines
         time_interval = (timestamps[-1] - timestamps[0]) / (num_labels - 1)
@@ -119,7 +132,9 @@ async def create_price_chart(timeframe="1hr"):
             timestamp = timestamps[0] + (i * time_interval)
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
             time_str = format_time_label(timestamp, timeframe)
-            draw.text((x - 25, height - bottom_padding + 20), time_str, fill=label_color, font=font)
+            # Center the time label under the grid line
+            time_width, _ = draw.textsize(time_str, font=time_font)
+            draw.text((x - time_width/2, height - bottom_padding + 20), time_str, fill=label_color, font=time_font)
 
         # Draw price line
         points = []
