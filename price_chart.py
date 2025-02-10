@@ -108,10 +108,11 @@ async def create_price_chart(timeframe="1hr"):
         try:
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
             price_font = time_font  # Use same font for price labels
-            crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)  # Larger for crash text
+            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)  # Increased from 36
+            crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)  # Increased from 32
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
-            time_font = price_font = crash_font = ImageFont.load_default()
+            time_font = price_font = title_font = crash_font = ImageFont.load_default()
 
         # Draw grid and labels with adjusted colors
         grid_color = '#0D3517'  # Slightly lighter green for grid
@@ -123,22 +124,44 @@ async def create_price_chart(timeframe="1hr"):
         current_price = prices[-1]
         crash_percent = ((entry_price - current_price) / entry_price) * 100
 
-        # Draw crash percentage in top right corner with improved visibility
-        crash_text = f"Down {crash_percent:.1f}% since NWA takeover"
-        crash_text_width = draw.textlength(crash_text, font=crash_font)
-        crash_x = width - padding - crash_text_width - 20  # More padding from right edge
-        crash_y = 30  # Slightly lower position from top
+        # Create title based on timeframe
+        title = f"$LUX {timeframe} Chart"
 
-        # Enhanced outline for better visibility
+        # Text colors and outline settings
+        text_color = 'white'
         outline_color = 'black'
-        outline_width = 3  # Increased outline width
+        outline_width = 3  # Increased from 2 for better visibility
+
+        # Calculate text dimensions for centering
+        title_width = draw.textlength(title, font=title_font)
+
+        # Calculate text heights (approximate)
+        title_height = title_font.size
+        crash_height = crash_font.size
+
+        # Calculate centered positions
+        title_x = (img.width - title_width) / 2
+
+        # Adjust vertical positioning
+        title_y = 30  # Increased from 20 for better spacing
+
+        # Draw crash percentage text below title
+        crash_text = f"Down {crash_percent:.1f}% since NWA takeover"
+        crash_width = draw.textlength(crash_text, font=crash_font)
+        crash_x = (img.width - crash_width) / 2
+        crash_y = title_y + title_height + 20  # Position below title
+
+        # Draw outline for better text visibility
         for dx in range(-outline_width, outline_width+1):
             for dy in range(-outline_width, outline_width+1):
                 if dx != 0 or dy != 0:  # Skip center position
+                    draw.text((title_x+dx, title_y+dy), title, font=title_font, fill=outline_color)
                     draw.text((crash_x+dx, crash_y+dy), crash_text, font=crash_font, fill=outline_color)
 
-        # Draw main crash text in bright red
-        draw.text((crash_x, crash_y), crash_text, font=crash_font, fill='#FF4444')  # Bright red for emphasis
+        # Draw main text
+        draw.text((title_x, title_y), title, font=title_font, fill=text_color)
+        draw.text((crash_x, crash_y), crash_text, font=crash_font, fill='#FF4444')  # Bright red for crash text
+
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
