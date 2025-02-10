@@ -387,12 +387,16 @@ async def main():
 
         logger.info(f"Keep-alive server started successfully on port {server_port}")
 
+        # First remove any existing workflow
+        from workflows_remove_run_config_tool import workflows_remove_run_config_tool
+        workflows_remove_run_config_tool(name="Discord Bot")
+
         # Configure workflow with the actual port
         from workflows_set_run_config_tool import workflows_set_run_config_tool
         workflows_set_run_config_tool(
             name="Discord Bot",
             command="python bot.py",
-            wait_for_port=server_port
+            wait_for_port=server_port  # Now we pass the actual port
         )
 
         # Initialize supervisor with enhanced monitoring
