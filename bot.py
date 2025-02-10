@@ -14,6 +14,7 @@ from keep_alive import keep_alive
 from roast_generator import generate_roast
 from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
+from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
 
 # Set up logging with more detail for connection issues
@@ -119,7 +120,6 @@ async def on_command_error(ctx, error):
         logger.error(f'Error in command "{ctx.command}": {str(error)}')
         await ctx.send("❌ Command failed! Try !help to see available commands.")
 
-# Enhanced error event handler
 @bot.event
 async def on_error(event, *args, **kwargs):
     """Handle any uncaught exceptions"""
@@ -180,21 +180,28 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             status=discord.Status.online
         )
 
-        # Clean and validate token
+        # Clean token input
         token = token.strip('$').lower()
 
-        # Map common token symbols to CoinGecko IDs
-        token_map = {
-            "lux": {"id": "lux-token", "entry": 0.015},  # LUX with NWA entry price
-            "btc": {"id": "bitcoin", "entry": None},
-            "eth": {"id": "ethereum", "entry": None},
-            # Add more mappings as needed
-        }
+        # Handle LUX separately as it's our primary token
+        if token == "lux":
+            token_id = "lux-token"
+            entry_price = 0.015  # NWA entry price
+            token_symbol = "LUX"
+        else:
+            # Validate contract address format (simple check)
+            if not (len(token) == 43 or len(token) == 44):  # Solana addresses are typically 43/44 chars
+                await ctx.send("❌ Invalid Solana contract address! Please provide a valid contract address.")
+                return
 
-        if token not in token_map:
-            logger.warning(f"Unsupported token requested: {token}")
-            await ctx.send("❌ Unsupported token! Currently supporting: $LUX, $BTC, $ETH")
-            return
+            # Get token info using contract address
+            token_id = await get_solana_token_by_contract(token)
+            if not token_id:
+                await ctx.send(f"❌ No token found for contract address: {token}")
+                return
+
+            entry_price = None  # No entry price for other tokens
+            token_symbol = token[:8] + "..."  # Truncate contract address for display
 
         # Validate timeframe
         valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
@@ -204,16 +211,16 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             return
 
         # Send initial message
-        token_upper = token.upper()
-        logger.info(f"Sending initial message for {token_upper} with timeframe {timeframe}")
-        message = await ctx.send(f"📊 Generating ${token_upper} price chart ({timeframe})...")
+        message = await ctx.send(f"📊 Generating chart for {token_symbol} ({timeframe})...")
 
-        # Generate meme with token parameters
+        # Generate meme
         logger.info("Starting meme generation process")
-        token_info = token_map[token]
-        meme_path = await generate_meme(timeframe=timeframe, token_id=token_info["id"], 
-                                      token_symbol=token_upper, entry_price=token_info["entry"])
-        logger.info(f"Meme generation completed, path: {meme_path}")
+        meme_path = await generate_meme(
+            timeframe=timeframe,
+            token_id=token_id,
+            token_symbol=token_symbol,
+            entry_price=entry_price
+        )
 
         if meme_path and os.path.exists(meme_path):
             try:
@@ -237,7 +244,7 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            await message.edit(content=f"Failed to generate chart! {token_upper} price data not found! 📉")
+            await message.edit(content=f"Failed to generate chart! Token data not found! 📉")
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")
@@ -294,7 +301,7 @@ async def help_command(ctx):
 • `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
 • `!meme [token] [timeframe]` - Generate a price chart meme
-  - Tokens: $LUX, $BTC, $ETH
+  - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
     """
@@ -344,7 +351,8 @@ async def main():
 
         # Start the keep-alive server in a separate thread
         logger.info("Starting keep-alive server...")
-        if not keep_alive():
+        server_started = keep_alive()
+        if not server_started:
             logger.error("Failed to start keep-alive server")
             return
 
@@ -368,6 +376,14 @@ async def main():
         await shutdown(bot)
         return
 
+# Constants for reconnection handling
+KEEP_ALIVE_INTERVAL = 30  # Increased to reduce unnecessary checks
+HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
+RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
+last_heartbeat = datetime.now()
+reconnect_attempts = 0
+MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+
 if __name__ == "__main__":
     try:
         logger.info("Starting bot...")
@@ -379,11 +395,3 @@ if __name__ == "__main__":
         logger.exception("Full traceback:")
     finally:
         logger.info("Bot shutdown complete")
-
-# Constants for reconnection handling (moved to the end for better organization)
-KEEP_ALIVE_INTERVAL = 30  # Increased to reduce unnecessary checks
-HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
-RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
-last_heartbeat = datetime.now()
-reconnect_attempts = 0
-MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts

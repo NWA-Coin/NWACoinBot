@@ -34,24 +34,23 @@ def format_time_label(timestamp, timeframe):
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
 
-        # Include both date and time for all timeframes
+        # Initialize default values
+        time_str = ""
+        date_str = eastern_time.strftime("%m/%d")  # Always show date
+
+        # Set time string based on timeframe
         if timeframe in ["5m", "15m", "1hr"]:
             time_str = eastern_time.strftime("%-I:%M %p")
-            date_str = eastern_time.strftime("%m/%d")
         elif timeframe == "24hr":
             time_str = eastern_time.strftime("%-I%p")
-            date_str = eastern_time.strftime("%m/%d")
         elif timeframe == "7d":
             time_str = eastern_time.strftime("%a")
-            date_str = eastern_time.strftime("%m/%d")
-        elif timeframe in ["1m", "3m"]:
-            time_str = eastern_time.strftime("")
-            date_str = eastern_time.strftime("%m/%d")
+        # For 1m and 3m, time_str remains empty as initialized
 
         return time_str, date_str
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
-        return "N/A", "N/A"
+        return "", "N/A"  # Return safe defaults on error
 
 async def get_lux_price_history(timeframe="1hr", token_id="lux-token"):
     """Get price history with specified timeframe."""
@@ -145,7 +144,7 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
 
         # Add crash percentage text under title if applicable
         if crash_percent is not None:
-            crash_text = f"Down {crash_percent:.1f}% Since Entry"
+            crash_text = f"Down {crash_percent:.1f}% Since NWA Takeover"
             crash_width = draw.textlength(crash_text, font=crash_font)
             crash_x = (img.width - crash_width) / 2
             crash_y = title_y + 60
@@ -181,7 +180,7 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
                          fill='#0000FF', width=2)
 
             # Add label for entry price line in white
-            label = f"Entry Price ({format_price_label(entry_price)})"
+            label = "NWA Takeover"
             label_width = draw.textlength(label, font=time_font)
             draw.text((x_start + 10, entry_y - 20), label, 
                      font=time_font, fill='#FFFFFF')

@@ -21,6 +21,41 @@ MIN_API_INTERVAL = 30  # Minimum seconds between API calls
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
+async def get_solana_token_by_contract(contract_address: str) -> Optional[str]:
+    """Get CoinGecko token ID using Solana contract address."""
+    try:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            headers = {}
+            if COINGECKO_API_KEY:
+                headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
+
+            # Query CoinGecko's coin list endpoint
+            endpoint = f"{COINGECKO_BASE_URL}/coins/list"
+            params = {"include_platform": "true"}
+
+            logger.info(f"Searching for Solana token with contract: {contract_address}")
+
+            async with session.get(endpoint, params=params, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Find token with matching Solana contract address
+                    for token in data:
+                        platforms = token.get("platforms", {})
+                        if "solana" in platforms and platforms["solana"].lower() == contract_address.lower():
+                            logger.info(f"Found Solana token: {token['id']}")
+                            return token["id"]
+
+                    logger.warning(f"No token found for Solana contract: {contract_address}")
+                    return None
+
+                logger.error(f"Token search failed with status: {response.status}")
+                return None
+
+    except Exception as e:
+        logger.error(f"Error searching for token: {str(e)}")
+        return None
+
 async def fetch_market_data(token_id=DEFAULT_TOKEN_ID, timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[Dict]]:
     """Fetch live market data from CoinGecko API with retries."""
     try:
