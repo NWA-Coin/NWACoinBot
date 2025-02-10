@@ -29,25 +29,29 @@ def format_price_label(price):
     return f"{cents:.2f}¢"
 
 def format_time_label(timestamp, timeframe):
-    """Format time label based on timeframe."""
+    """Format time label based on timeframe, returning separate time and date components."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
 
         # Include both date and time for all timeframes
         if timeframe in ["5m", "15m", "1hr"]:
-            return eastern_time.strftime("%m/%d %-I:%M %p")
+            time_str = eastern_time.strftime("%-I:%M %p")
+            date_str = eastern_time.strftime("%m/%d")
         elif timeframe == "24hr":
-            return eastern_time.strftime("%m/%d %-I%p")
+            time_str = eastern_time.strftime("%-I%p")
+            date_str = eastern_time.strftime("%m/%d")
         elif timeframe == "7d":
-            return eastern_time.strftime("%m/%d %a")
+            time_str = eastern_time.strftime("%a")
+            date_str = eastern_time.strftime("%m/%d")
         elif timeframe in ["1m", "3m"]:
-            return eastern_time.strftime("%m/%d")
+            time_str = eastern_time.strftime("")
+            date_str = eastern_time.strftime("%m/%d")
 
-        return eastern_time.strftime("%m/%d %-I:%M %p")
+        return time_str, date_str
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
-        return "N/A"
+        return "N/A", "N/A"
 
 async def get_lux_price_history(timeframe="1hr"):
     """Get LUX price history with specified timeframe."""
@@ -101,8 +105,8 @@ async def create_price_chart(timeframe="1hr"):
         price_range = max_price - min_price
 
         try:
-            # Load fonts
-            time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+            # Load fonts with smaller size for time labels
+            time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
             price_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
@@ -133,19 +137,27 @@ async def create_price_chart(timeframe="1hr"):
         else:
             num_labels = 8
 
-        # Draw time labels and vertical grid lines
+        # Draw time labels and vertical grid lines with two-line format
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
             index = int((i / (num_labels - 1)) * (len(timestamps) - 1))
             timestamp = timestamps[index]
 
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
-            time_str = format_time_label(timestamp, timeframe)
+            time_str, date_str = format_time_label(timestamp, timeframe)
 
-            # Center the time label under the grid line
+            # Calculate text widths for centering
             time_width = draw.textlength(time_str, font=time_font)
-            draw.text((x - time_width/2, height - bottom_padding + 20), 
-                     time_str, fill=label_color, font=time_font)
+            date_width = draw.textlength(date_str, font=time_font)
+
+            # Draw time on top line
+            if time_str:  # Only draw if time string is not empty
+                draw.text((x - time_width/2, height - bottom_padding + 10), 
+                         time_str, fill=label_color, font=time_font)
+
+            # Draw date on bottom line
+            draw.text((x - date_width/2, height - bottom_padding + 30), 
+                     date_str, fill=label_color, font=time_font)
 
         # Draw price line
         points = []
