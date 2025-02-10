@@ -26,7 +26,33 @@ class WalletManager:
         logger.info(f"WalletManager initialized with TOKEN_CONTRACT: {TOKEN_CONTRACT}")
         logger.info(f"Min holding amount: {MIN_HOLDING_AMOUNT}")
 
-    async def get_token_balance(self, wallet_address: str) -> Optional[float]:
+    def setup_database(self):
+        """Create necessary tables if they don't exist"""
+        try:
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cur:
+                    # Create wallet_links table with airdrop and balance tracking
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS wallet_links (
+                            id SERIAL PRIMARY KEY,
+                            discord_id BIGINT NOT NULL UNIQUE,
+                            wallet_address TEXT NOT NULL UNIQUE,
+                            verified BOOLEAN DEFAULT FALSE,
+                            verification_code TEXT,
+                            airdrop_claimed BOOLEAN DEFAULT FALSE,
+                            token_balance BIGINT DEFAULT 0,
+                            last_balance_update TIMESTAMP,
+                            airdrop_eligible BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    conn.commit()
+                    logger.info("Database tables created successfully")
+        except Exception as e:
+            logger.error(f"Database setup error: {str(e)}")
+            raise
+
+    async def get_token_balance(self, wallet_address: str) -> Optional[int]:
         """Get token balance for a Solana wallet"""
         try:
             async with aiohttp.ClientSession() as session:
@@ -38,38 +64,63 @@ class WalletManager:
                     "params": [
                         wallet_address,
                         {
-                            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"  # Solana Token Program ID
+                            "mint": TOKEN_CONTRACT,
+                            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                         },
                         {"encoding": "jsonParsed"}
                     ]
                 }
 
                 logger.info(f"Querying token accounts for wallet: {wallet_address}")
+                logger.info(f"Using token contract: {TOKEN_CONTRACT}")
+
                 async with session.post(SOLANA_RPC_URL, json=payload) as response:
                     if response.status == 200:
                         data = await response.json()
                         if 'result' in data and 'value' in data['result']:
-                            # Search through all token accounts for our specific token
-                            for account in data['result']['value']:
+                            total_balance = 0
+                            account_count = len(data['result']['value'])
+                            logger.info(f"Found {account_count} token accounts to process")
+
+                            for i, account in enumerate(data['result']['value'], 1):
                                 try:
                                     parsed_data = account['account']['data']['parsed']
                                     if 'info' in parsed_data:
                                         info = parsed_data['info']
-                                        # Check if this account holds our token
-                                        if info['mint'].lower() == TOKEN_CONTRACT.lower():
-                                            # Get the token amount, accounting for decimals
-                                            amount = float(info['tokenAmount']['uiAmount'])
-                                            logger.info(f"Found NWADEV balance for {wallet_address}: {amount}")
-                                            return amount
+                                        # Verify mint address matches exactly
+                                        if info['mint'] == TOKEN_CONTRACT:
+                                            # Get raw amount from tokenAmount
+                                            token_amount = info['tokenAmount']
+                                            # Use amount field for precise integer value
+                                            raw_amount = int(token_amount['amount'])
+                                            # Always use 9 decimals for NWADEV token
+                                            decimals = 9
+                                            # Calculate actual amount - corrected calculation
+                                            amount = raw_amount // (10 ** decimals)
+
+                                            logger.info(f"Token account {i}/{account_count} breakdown:")
+                                            logger.info(f"  Raw amount from blockchain: {raw_amount}")
+                                            logger.info(f"  Using decimals: {decimals}")
+                                            logger.info(f"  Calculated amount: {amount}")
+                                            logger.info(f"  Calculation: {raw_amount} / (10 ^ {decimals}) = {amount}")
+                                            logger.info(f"  Running total before: {total_balance}")
+
+                                            total_balance += amount
+                                            logger.info(f"  Running total after: {total_balance}")
+
+                                            if total_balance > 0:
+                                                logger.info(f"Final total NWADEV balance for {wallet_address}: {total_balance:,} tokens")
+                                                return total_balance
+
                                 except (KeyError, ValueError) as e:
-                                    logger.error(f"Error parsing account data: {str(e)}")
+                                    logger.error(f"Error parsing account {i}/{account_count}: {str(e)}")
                                     continue
 
-                            logger.info(f"No NWADEV tokens found for wallet: {wallet_address}")
-                            return 0.0
+                            logger.warning(f"No NWADEV tokens found for wallet: {wallet_address}")
+                            return 0
                         else:
                             logger.error("Invalid response format from Solana RPC")
-                            logger.debug(f"Response data: {data}")
+                            logger.error(f"Response data: {data}")
                             return None
                     else:
                         logger.error(f"Failed to get token accounts: {response.status}")
@@ -137,7 +188,7 @@ class WalletManager:
 
                     result = cur.fetchone()
                     if result:
-                        token_balance = float(result['token_balance'])
+                        token_balance = int(result['token_balance']) # Changed to int
                         eligible = token_balance >= MIN_HOLDING_AMOUNT and not result['airdrop_claimed']
                         logger.info(f"Eligibility check - Balance: {token_balance}, Required: {MIN_HOLDING_AMOUNT}, Eligible: {eligible}")
                         return True, token_balance, eligible
@@ -149,32 +200,6 @@ class WalletManager:
             logger.error(f"Error checking airdrop eligibility: {str(e)}")
             logger.exception("Full traceback:")
             return False, None, False
-
-    def setup_database(self):
-        """Create necessary tables if they don't exist"""
-        try:
-            with psycopg2.connect(self.db_url) as conn:
-                with conn.cursor() as cur:
-                    # Create wallet_links table with airdrop and balance tracking
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS wallet_links (
-                            id SERIAL PRIMARY KEY,
-                            discord_id BIGINT NOT NULL UNIQUE,
-                            wallet_address TEXT NOT NULL UNIQUE,
-                            verified BOOLEAN DEFAULT FALSE,
-                            verification_code TEXT,
-                            airdrop_claimed BOOLEAN DEFAULT FALSE,
-                            token_balance DECIMAL(20, 8) DEFAULT 0.0,
-                            last_balance_update TIMESTAMP,
-                            airdrop_eligible BOOLEAN DEFAULT FALSE,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    conn.commit()
-                    logger.info("Database tables created successfully")
-        except Exception as e:
-            logger.error(f"Database setup error: {str(e)}")
-            raise
 
     async def update_token_balance(self, discord_id: int, new_balance: float) -> bool:
         """Update the token balance and check airdrop eligibility"""
@@ -193,7 +218,7 @@ class WalletManager:
                             END
                         WHERE discord_id = %s AND verified = TRUE
                         RETURNING wallet_address
-                    """, (new_balance, new_balance, MIN_HOLDING_AMOUNT, discord_id))
+                    """, (int(new_balance), int(new_balance), MIN_HOLDING_AMOUNT, discord_id)) #new_balance converted to int
 
                     result = cur.fetchone()
                     conn.commit()

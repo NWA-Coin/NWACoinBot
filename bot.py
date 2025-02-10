@@ -102,9 +102,10 @@ async def on_message(message):
 
     # Process commands with enhanced error handling
     if message.content.startswith(bot.command_prefix):
-        logger.info(f"Processing command: {message.content} from {message.author}")
         try:
+            # Prevent double processing by only handling command once
             await bot.process_commands(message)
+            return  # Return after processing to prevent double execution
         except Exception as e:
             logger.error(f"Error processing command: {str(e)}")
             logger.exception("Full command processing traceback:")
@@ -187,8 +188,21 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             status=discord.Status.online
         )
 
-        # Clean token input
+        # Validate timeframe first
+        valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
+
+        # Check if the first parameter is actually a timeframe
+        if token.lower() in valid_timeframes:
+            timeframe = token.lower()
+            token = "$lux"  # Default to LUX if first param is timeframe
+        elif timeframe.lower() not in valid_timeframes:
+            logger.warning(f"Invalid timeframe requested: {timeframe}")
+            await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
+            return
+
+        # Now handle token validation
         token = token.strip('$').lower()
+        message = None
 
         # Handle LUX separately as it's our primary token
         if token == "lux":
@@ -217,13 +231,6 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             # Update message with found token info
             await message.edit(content=f"📊 Generating chart for {token_name} ({token_symbol})...")
 
-        # Validate timeframe
-        valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
-        if timeframe not in valid_timeframes:
-            logger.warning(f"Invalid timeframe requested: {timeframe}")
-            await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
-            return
-
         # Generate meme
         logger.info("Starting meme generation process")
         meme_path = await generate_meme(
@@ -239,12 +246,12 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
                 logger.info("Sending meme file to Discord")
                 with open(meme_path, 'rb') as f:
                     await ctx.send(file=discord.File(f))
-                if 'message' in locals():
+                if message:
                     await message.delete()
                 logger.info("Successfully sent meme and cleaned up message")
             except Exception as e:
                 logger.error(f"Error sending meme file: {str(e)}")
-                if 'message' in locals():
+                if message:
                     await message.edit(content="Failed to send meme! Error occurred while sending file.")
                 return
 
@@ -257,7 +264,7 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            if 'message' in locals():
+            if message:
                 await message.edit(content=f"Failed to generate chart! Token data not found! 📉")
             else:
                 await ctx.send(f"Failed to generate chart! Token data not found! 📉")
@@ -406,17 +413,29 @@ async def check_balance(ctx):
             await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
             return
 
+        # Update balance before displaying
+        await wallet_manager.update_wallet_balance(ctx.author.id)
+
+        # Get fresh wallet data after update
+        wallet = await wallet_manager.get_user_wallet(ctx.author.id)
+        if not wallet:
+            await ctx.send("❌ Error retrieving wallet data")
+            return
+
         # Format balance message with timestamp
         last_update = wallet['last_balance_update']
         update_str = f"<t:{int(last_update.timestamp())}:R>" if last_update else "Never"
 
+        # Display balance as integer with commas for readability
+        token_balance = int(wallet['token_balance'])
         balance_msg = (
             f"💰 Your NWA Balance:\n"
-            f"Amount: `{wallet['token_balance']:,.8f} NWA`\n"
+            f"Amount: `{token_balance:,} NWA`\n"
             f"Last Updated: {update_str}"
         )
 
         await ctx.send(balance_msg)
+        logger.info(f"Displayed balance of {token_balance:,} NWA tokens for user {ctx.author.id}")
     except Exception as e:
         logger.error(f"Error in check_balance command: {str(e)}")
         await ctx.send("❌ Failed to retrieve balance info")
@@ -449,9 +468,9 @@ async def check_airdrop(ctx):
 
         # Format response based on balance
         if balance >= MIN_HOLDING_AMOUNT:
-            await ctx.send(f"✅ Your wallet holds {balance:,.0f} NWADEV tokens, which meets the minimum requirement of {MIN_HOLDING_AMOUNT:,} tokens!")
+            await ctx.send(f"✅ Your wallet holds {int(balance):,} NWADEV tokens, which meets the minimum requirement of {MIN_HOLDING_AMOUNT:,} tokens!")
         else:
-            await ctx.send(f"❌ Your wallet holds {balance:,.0f} NWADEV tokens. You need at least {MIN_HOLDING_AMOUNT:,} tokens to qualify!")
+            await ctx.send(f"❌ Your wallet holds {int(balance):,} NWADEV tokens. You need at least {MIN_HOLDING_AMOUNT:,} tokens to qualify!")
 
     except Exception as e:
         logger.error(f"Error in airdrop command: {str(e)}")
