@@ -27,7 +27,7 @@ args = "Create Templates"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Discord Bot"
+args = "Keep Alive Server"
 
 [[workflows.workflow]]
 name = "Python REPL"
@@ -58,7 +58,7 @@ task = "shell.exec"
 args = "python create_templates.py"
 
 [[workflows.workflow]]
-name = "Discord Bot"
+name = "Keep Alive Server"
 author = "agent"
 
 [workflows.workflow.metadata]
@@ -69,8 +69,8 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python bot.py"
-waitForPort = 8081
+args = "python keep_alive.py"
+waitForPort = 8080
 
 [deployment]
 run = ["sh", "-c", "python python_repl.py"]

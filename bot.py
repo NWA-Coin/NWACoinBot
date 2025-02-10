@@ -30,9 +30,6 @@ if not TOKEN:
     logger.error("No Discord token found!")
     exit(1)
 
-# Start the keep-alive server before bot initialization
-keep_alive()
-
 # Bot setup with enhanced reconnect settings
 intents = discord.Intents.default()
 intents.message_content = True
@@ -49,16 +46,10 @@ bot = commands.Bot(
 # Remove default help command
 bot.remove_command('help')
 
-# Track connection state
-last_heartbeat = datetime.now()
-reconnect_attempts = 0
-MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+# Start the keep-alive server before bot initialization
+keep_alive()
 
-# Enhanced keep-alive settings
-KEEP_ALIVE_INTERVAL = 15  # Check every 15 seconds
-HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
-RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
-
+# Initialize supervisor
 supervisor = BotSupervisor()
 supervisor.setup_signal_handlers()
 
@@ -77,28 +68,6 @@ async def on_ready():
     # Start supervisor monitoring
     bot.loop.create_task(supervisor.monitor(bot))
     logger.info("Started bot supervisor monitoring")
-
-async def keep_alive():
-    """Enhanced keep-alive loop to maintain bot connection"""
-    global last_heartbeat
-    logger.info("Starting keep-alive loop")
-    while True:
-        try:
-            if not bot.is_closed():
-                last_heartbeat = datetime.now()
-                logger.info("Keep-alive heartbeat: Bot is active")
-                await bot.change_presence(
-                    activity=discord.Game(name="!help | Roasting LUX"),
-                    status=discord.Status.online
-                )
-                await asyncio.sleep(KEEP_ALIVE_INTERVAL)
-            else:
-                logger.warning("Keep-alive detected closed connection")
-                await handle_disconnection()
-                await asyncio.sleep(5)  # Brief delay before retry
-        except Exception as e:
-            logger.error(f"Error in keep-alive loop: {str(e)}")
-            await asyncio.sleep(5)
 
 async def monitor_heartbeat():
     """Monitor bot's heartbeat and force reconnect if needed"""
@@ -373,3 +342,11 @@ if __name__ == "__main__":
         logger.critical(f"Critical bot error: {str(e)}")
         logger.exception("Full traceback:")
         sys.exit(1)  # Let the process manager handle restart
+
+# Constants for reconnection handling
+KEEP_ALIVE_INTERVAL = 30  # Increased to reduce unnecessary checks
+HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
+RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
+last_heartbeat = datetime.now()
+reconnect_attempts = 0
+MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
