@@ -108,37 +108,14 @@ async def create_price_chart(timeframe="1hr"):
             # Load fonts with consistent size for all labels
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
             price_font = time_font  # Use same font for price labels
-            # Military-style font for header
-            header_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 24)  # Smaller header
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
-            time_font = price_font = header_font = ImageFont.load_default()
+            time_font = price_font = ImageFont.load_default()
 
         # Draw grid and labels with adjusted colors
         grid_color = '#0D3517'  # Slightly lighter green for grid
         label_color = '#FFFFFF'
         line_color = '#FF3333'
-
-        # Create title based on timeframe
-        title = f"$LUX {timeframe} Chart"
-
-        # Center the title
-        title_width = draw.textlength(title, font=header_font)
-        title_x = (width - title_width) / 2
-        title_y = 20  # Adjust vertical position as needed
-
-        # Draw outline and text for centered title
-        outline_color = 'black'
-        outline_width = 2
-
-        # Draw outline
-        for dx in range(-outline_width, outline_width+1):
-            for dy in range(-outline_width, outline_width+1):
-                if dx != 0 or dy != 0:
-                    draw.text((title_x+dx, title_y+dy), title, font=header_font, fill=outline_color)
-
-        # Draw main title text
-        draw.text((title_x, title_y), title, font=header_font, fill=label_color)
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
