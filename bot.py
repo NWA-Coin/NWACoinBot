@@ -16,7 +16,7 @@ from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from supervisor import BotSupervisor
 
-# Set up logging
+# Set up logging with more detail for connection issues
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -30,10 +30,17 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     logger.error("No Discord token found!")
     exit(1)
+else:
+    logger.info("Discord token loaded successfully")
 
 # Bot setup with enhanced reconnect settings
 intents = discord.Intents.default()
 intents.message_content = True
+intents.guilds = True  # Enable guild-related events
+intents.messages = True  # Enable message-related events
+logger.info("Setting up bot with intents: message_content=%s, guilds=%s, messages=%s",
+           intents.message_content, intents.guilds, intents.messages)
+
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
@@ -86,9 +93,6 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Add more detailed logging
-    logger.info(f"Received message: {message.content[:50]}... from {message.author}")
-
     # Only process messages from guilds (servers), not DMs
     if not message.guild:
         logger.info("Ignoring DM message")
@@ -107,6 +111,7 @@ async def on_message(message):
 @bot.event
 async def on_command_error(ctx, error):
     """Handle command errors gracefully"""
+    logger.error(f"Command error occurred: {str(error)}")
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(f"⏳ Command on cooldown. Try again in {error.retry_after:.1f}s")
     elif isinstance(error, commands.CommandNotFound):
@@ -278,12 +283,22 @@ def format_price_label(price):
 def cleanup():
     """Cleanup function to handle graceful shutdown"""
     logger.info("Bot cleanup initiated")
-    if not bot.is_closed():
-        logger.info("Closing bot connection...")
-        asyncio.run_coroutine_threadsafe(bot.close(), bot.loop)
-    logger.info("Cleanup complete")
+    try:
+        if not bot.is_closed():
+            logger.info("Closing bot connection...")
+            asyncio.create_task(bot.close())
+        logger.info("Cleanup complete")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {str(e)}")
 
-atexit.register(cleanup)
+async def shutdown(bot):
+    """Async shutdown handler"""
+    try:
+        if not bot.is_closed():
+            await bot.close()
+            logger.info("Bot connection closed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {str(e)}")
 
 # Signal handlers for graceful shutdown
 def signal_handler(signum, frame):
@@ -299,6 +314,8 @@ signal.signal(signal.SIGINT, signal_handler)
 async def main():
     """Main async entry point"""
     try:
+        logger.info("Starting bot initialization...")
+
         # Start the keep-alive server
         if not keep_alive():
             logger.error("Failed to start keep-alive server")
@@ -308,14 +325,20 @@ async def main():
         supervisor = BotSupervisor()
         supervisor.setup_signal_handlers()
 
-        # Start the bot
+        # Register cleanup for graceful shutdown
+        atexit.register(cleanup)
+
+        # Start the bot with enhanced logging
+        logger.info("Attempting to connect to Discord...")
         async with bot:
             bot.loop.create_task(supervisor.monitor(bot))
+            logger.info("Starting bot with token...")
             await bot.start(TOKEN)
 
     except Exception as e:
         logger.critical(f"Critical error in main: {str(e)}")
         logger.exception("Full traceback:")
+        await shutdown(bot)
         return
 
 if __name__ == "__main__":
