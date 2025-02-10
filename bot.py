@@ -191,9 +191,9 @@ async def meme(ctx, timeframe: str = "7d"):
         logger.info(f"Sending initial message for timeframe {timeframe}")
         message = await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
 
-        # Generate meme
+        # Generate meme with explicit timeframe parameter
         logger.info("Starting meme generation process")
-        meme_path = await generate_meme(timeframe)
+        meme_path = await generate_meme(timeframe=timeframe)
         logger.info(f"Meme generation completed, path: {meme_path}")
 
         if meme_path and os.path.exists(meme_path):

@@ -80,11 +80,7 @@ async def create_price_chart(timeframe="1hr"):
             logger.error("Failed to get price data")
             return None, None, None
 
-        # Log price data for debugging
-        logger.info(f"Price data points: {len(prices)}")
-        logger.info(f"First price: ${prices[0]:.6f}, Last price: ${prices[-1]:.6f}")
-
-        # Chart dimensions
+        # Chart dimensions and setup
         width = 1280
         height = 720
         padding = 80
@@ -99,16 +95,13 @@ async def create_price_chart(timeframe="1hr"):
         chart_width = width - (2 * padding)
         chart_height = height - (top_padding + bottom_padding)
 
-        # Calculate price range with padding and ensure entry price is visible if 7d timeframe
-        entry_price = 0.015  # NWA entry price - 1.5 cents
-        if timeframe == "7d":
-            max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
-            min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
-        else:
-            max_price = max(prices) * 1.05  # Add 5% padding
-            min_price = min(prices) * 0.95  # Add 5% padding
+        # Calculate price range
+        entry_price = 0.015  # NWA entry price
+        max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
+        min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
         price_range = max_price - min_price
 
+        # Load fonts
         try:
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
             price_font = time_font
@@ -118,50 +111,10 @@ async def create_price_chart(timeframe="1hr"):
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             time_font = price_font = title_font = crash_font = ImageFont.load_default()
 
-        # Draw grid and labels with adjusted colors
+        # Colors
         grid_color = '#0D3517'  # Slightly lighter green for grid
         label_color = '#FFFFFF'
         line_color = '#FF3333'
-
-        # Calculate crash percentage
-        current_price = prices[-1]
-        crash_percent = ((entry_price - current_price) / entry_price) * 100
-
-        # Create title based on timeframe
-        title = f"$LUX {timeframe} Chart"
-
-        # Text colors and outline settings
-        text_color = 'white'
-        outline_color = 'black'
-        outline_width = 3
-
-        # Calculate text dimensions for centering
-        title_width = draw.textlength(title, font=title_font)
-
-        # Calculate text heights (approximate)
-        title_height = title_font.size
-        crash_height = crash_font.size
-
-        # Calculate centered positions
-        title_x = (img.width - title_width) / 2
-        title_y = 30
-
-        # Draw crash percentage text below title
-        crash_text = f"Down {crash_percent:.1f}% since NWA takeover"
-        crash_width = draw.textlength(crash_text, font=crash_font)
-        crash_x = (img.width - crash_width) / 2
-        crash_y = title_y + title_height + 20
-
-        # Draw outline for better text visibility
-        for dx in range(-outline_width, outline_width+1):
-            for dy in range(-outline_width, outline_width+1):
-                if dx != 0 or dy != 0:
-                    draw.text((title_x+dx, title_y+dy), title, font=title_font, fill=outline_color)
-                    draw.text((crash_x+dx, crash_y+dy), crash_text, font=crash_font, fill=outline_color)
-
-        # Draw main text
-        draw.text((title_x, title_y), title, font=title_font, fill=text_color)
-        draw.text((crash_x, crash_y), crash_text, font=crash_font, fill='#FF4444')
 
         # Draw horizontal grid lines and price labels
         for i in range(6):
@@ -170,6 +123,23 @@ async def create_price_chart(timeframe="1hr"):
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
+
+        # Draw NWA entry price line
+        entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
+        # Draw dashed line using small segments
+        dash_length = 10
+        x_start = padding
+        x_end = width - padding
+
+        for x in range(int(x_start), int(x_end), dash_length * 2):
+            draw.line([(x, entry_y), (x + dash_length, entry_y)], 
+                     fill='#4444FF', width=2)
+
+        # Add label for NWA price line
+        label = "NWA Entry (1.5¢)"
+        label_width = draw.textlength(label, font=time_font)
+        draw.text((x_start + 10, entry_y - 20), label, 
+                 font=time_font, fill='#4444FF')
 
         # Draw time labels and vertical grid lines
         for i in range(8):
@@ -180,16 +150,14 @@ async def create_price_chart(timeframe="1hr"):
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
             time_str, date_str = format_time_label(timestamp, timeframe)
 
-            # Calculate text widths for centering
+            # Center and draw time labels
             time_width = draw.textlength(time_str, font=time_font)
             date_width = draw.textlength(date_str, font=time_font)
 
-            # Draw time on top line
             if time_str:
                 draw.text((x - time_width/2, height - bottom_padding + 10), 
                          time_str, fill=label_color, font=time_font)
 
-            # Draw date on bottom line
             draw.text((x - date_width/2, height - bottom_padding + 30), 
                      date_str, fill=label_color, font=time_font)
 
@@ -203,15 +171,6 @@ async def create_price_chart(timeframe="1hr"):
         if len(points) > 1:
             draw.line(points, fill='#FF6666', width=5)  # Background glow
             draw.line(points, fill=line_color, width=3)  # Main line
-
-        # Draw NWA entry point indicator for 7d timeframe only
-        if timeframe == "7d":
-            entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
-            dot_radius = 6
-            dot_color = '#4444FF'  # Bright blue
-            draw.ellipse([(padding - dot_radius, entry_y - dot_radius),
-                         (padding + dot_radius, entry_y + dot_radius)],
-                        fill=dot_color, outline='white', width=2)
 
         # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"

@@ -1,3 +1,12 @@
+import os
+import logging
+from datetime import datetime
+from PIL import Image
+from price_chart import create_price_chart
+
+# Set up logging
+logger = logging.getLogger('discord_bot')
+
 async def generate_meme(timeframe="1hr"):
     """Generate a price chart meme."""
     try:
