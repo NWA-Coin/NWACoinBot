@@ -11,7 +11,7 @@ import gc
 logger = logging.getLogger('discord_bot')
 
 class BotSupervisor:
-    def __init__(self):
+    def __init__(self, server_port=None):
         self.last_heartbeat = datetime.now()
         self.is_running = True
         self.consecutive_failures = 0
@@ -21,10 +21,12 @@ class BotSupervisor:
         self.last_restart = datetime.now()
         self.process = psutil.Process(os.getpid())
         self.memory_threshold = 85  # Memory threshold percentage
+        self.server_port = server_port
+        logger.info(f"Supervisor initialized with server port: {server_port}")
 
     async def monitor(self, bot):
         """Monitor bot's health and manage reconnection."""
-        logger.info("Starting bot supervisor monitoring")
+        logger.info(f"Starting bot supervisor monitoring with server port {self.server_port}")
 
         while self.is_running:
             try:

@@ -361,25 +361,42 @@ async def main():
     try:
         logger.info("Starting bot initialization sequence...")
 
-        # First, try to start the keep-alive server
+        # First, try to start the keep-alive server with retries
         logger.info("Attempting to start keep-alive server...")
-        server_started = keep_alive()
-        retries = 3
+        server_port = None
+        max_retries = 3
+        retry_count = 0
 
-        while not server_started and retries > 0:
-            logger.warning(f"Keep-alive server failed to start, retrying... ({retries} attempts left)")
-            await asyncio.sleep(2)  # Reduced wait time between retries
-            server_started = keep_alive()
-            retries -= 1
+        while server_port is None and retry_count < max_retries:
+            try:
+                server_port = keep_alive()
+                if server_port is None:
+                    retry_count += 1
+                    logger.warning(f"Keep-alive server failed to start, attempt {retry_count}/{max_retries}")
+                    if retry_count < max_retries:
+                        await asyncio.sleep(5)  # Increased wait between retries
+            except Exception as e:
+                logger.error(f"Error starting keep-alive server (attempt {retry_count + 1}): {str(e)}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    await asyncio.sleep(5)
 
-        if not server_started:
-            logger.error("Failed to start keep-alive server after all retries")
+        if server_port is None:
+            logger.critical("Failed to start keep-alive server after all retries")
             return
 
-        logger.info("Keep-alive server started successfully")
+        logger.info(f"Keep-alive server started successfully on port {server_port}")
+
+        # Configure workflow with the actual port
+        from workflows_set_run_config_tool import workflows_set_run_config_tool
+        workflows_set_run_config_tool(
+            name="Discord Bot",
+            command="python bot.py",
+            wait_for_port=server_port
+        )
 
         # Initialize supervisor with enhanced monitoring
-        supervisor = BotSupervisor()
+        supervisor = BotSupervisor(server_port)
         supervisor.setup_signal_handlers()
 
         # Register cleanup for graceful shutdown
