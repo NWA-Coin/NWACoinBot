@@ -13,7 +13,7 @@ from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
-from wallet_manager import WalletManager
+from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT, AIRDROP_AMOUNT
 
 # Set up logging
 logging.basicConfig(
@@ -398,23 +398,67 @@ async def check_balance(ctx):
         return
 
     try:
-        success, balance, last_update = await wallet_manager.get_token_balance(ctx.author.id)
+        wallet = await wallet_manager.get_user_wallet(ctx.author.id)
 
-        if not success:
+        if not wallet:
             await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
             return
 
-        # Format balance message
+        # Format balance message with timestamp
+        last_update = wallet['last_balance_update']
+        update_str = f"<t:{int(last_update.timestamp())}:R>" if last_update else "Never"
+
         balance_msg = (
             f"💰 Your NWA Balance:\n"
-            f"Amount: `{balance:,.8f} NWA`\n"
-            f"Last Updated: {last_update}"
+            f"Amount: `{wallet['token_balance']:,.8f} NWA`\n"
+            f"Last Updated: {update_str}"
         )
 
         await ctx.send(balance_msg)
     except Exception as e:
         logger.error(f"Error in check_balance command: {str(e)}")
         await ctx.send("❌ Failed to retrieve balance info")
+
+@bot.command(name='airdrop')
+@commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
+async def check_airdrop(ctx):
+    """Check airdrop eligibility and claim if eligible"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    try:
+        # First check if user has a verified wallet
+        wallet = await wallet_manager.get_user_wallet(ctx.author.id)
+        if not wallet:
+            await ctx.send("🏦 You need to link and verify your wallet first! Use !linkwallet to get started.")
+            return
+
+        # Check eligibility
+        success, balance, eligible = await wallet_manager.check_airdrop_eligibility(ctx.author.id)
+
+        if not success:
+            await ctx.send("❌ Error checking airdrop eligibility")
+            return
+
+        if not eligible:
+            if balance and balance >= MIN_HOLDING_AMOUNT:
+                await ctx.send("You've already claimed your airdrop! 🎉")
+            else:
+                await ctx.send(f"❌ Not eligible for airdrop. You need to hold at least {MIN_HOLDING_AMOUNT:,} tokens to qualify!")
+            return
+
+        # Process airdrop for eligible users
+        success, message = await wallet_manager.process_airdrop(ctx.author.id)
+
+        if success:
+            await ctx.send(f"🎉 Congratulations! {message}")
+        else:
+            await ctx.send(f"❌ {message}")
+
+    except Exception as e:
+        logger.error(f"Error in airdrop command: {str(e)}")
+        await ctx.send("❌ Error processing airdrop request")
 
 @bot.command(name='help')
 async def help_command(ctx):
@@ -438,6 +482,7 @@ async def help_command(ctx):
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
 • `!balance` - Check your NWA token balance
+• `!airdrop` - Check eligibility and claim airdrop
     """
     await ctx.send(help_text)
 

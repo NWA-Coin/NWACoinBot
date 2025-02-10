@@ -29,10 +29,6 @@ args = "Create Templates"
 task = "workflow.run"
 args = "Discord Bot"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Test Server"
-
 [[workflows.workflow]]
 name = "Python REPL"
 author = "agent"
@@ -74,21 +70,6 @@ task = "packager.installForAll"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python bot.py"
-waitForPort = 8000
-
-[[workflows.workflow]]
-name = "Test Server"
-author = "agent"
-
-[workflows.workflow.metadata]
-agentRequireRestartOnSave = false
-
-[[workflows.workflow.tasks]]
-task = "packager.installForAll"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python test_server.py"
 waitForPort = 3000
 
 [deployment]

@@ -18,13 +18,26 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     """Simple endpoint to respond to keep-alive pings"""
+    logger.info("Received request to keep-alive endpoint")
     return "Bot is alive!"
 
 def verify_server():
     """Test if server is responding"""
+    logger.info("Starting server verification...")
     time.sleep(2)  # Wait for server to start
+
     try:
-        response = requests.get('http://0.0.0.0:8000')
+        # First check if port is actually in use
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('127.0.0.1', 3000))
+        sock.close()
+
+        if result != 0:
+            logger.error("Port 3000 is not in use!")
+            return False
+
+        logger.info("Port 3000 is in use, testing HTTP response...")
+        response = requests.get('http://127.0.0.1:3000')
         logger.info(f"Server test response: {response.status_code}")
         return response.status_code == 200
     except Exception as e:
@@ -34,17 +47,17 @@ def verify_server():
 def keep_alive():
     """Start the keep-alive server and return the port"""
     try:
-        logger.info("Starting keep-alive server on port 8000...")
+        logger.info("Starting keep-alive server on port 3000...")
 
         # Start Flask in a daemon thread
-        server = Thread(target=lambda: app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False))
+        server = Thread(target=lambda: app.run(host='0.0.0.0', port=3000, debug=False, use_reloader=False))
         server.daemon = True
         server.start()
 
         # Verify server started properly
         if verify_server():
-            logger.info("Keep-alive server started successfully on port 8000")
-            return 8000
+            logger.info("Keep-alive server started successfully on port 3000")
+            return 3000
         else:
             logger.error("Failed to verify keep-alive server")
             return None
