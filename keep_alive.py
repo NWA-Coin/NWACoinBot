@@ -22,7 +22,8 @@ def run():
             host='0.0.0.0',
             port=8081,
             threaded=True,
-            debug=False
+            debug=False,
+            use_reloader=False  # Disable reloader to prevent duplicate processes
         )
     except Exception as e:
         logger.error(f"Flask server error: {str(e)}")
@@ -36,6 +37,8 @@ def keep_alive():
         server = Thread(target=run)
         server.daemon = True  # Dies when main thread dies
         server.start()
+        # Add a small delay to ensure server starts
+        time.sleep(2)
         logger.info("Keep-alive server started successfully")
     except Exception as e:
         logger.error(f"Error starting keep-alive server: {str(e)}")

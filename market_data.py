@@ -83,7 +83,6 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
 
                             timestamps = []
                             prices = []
-                            candles = []
 
                             # Process data points
                             for i in range(0, len(price_data)):

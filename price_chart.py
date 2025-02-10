@@ -31,22 +31,14 @@ async def get_lux_price_history(timeframe="1hr"):
 def format_price_label(price):
     """Format price in cents."""
     cents = price * 100
-    return f"{cents:.2f}¢"  # Keeping the 2 decimal points
+    return f"{cents:.2f}¢"
 
 def format_time_label(timestamp):
-    """Format time label in a human-friendly way."""
+    """Format time label."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
-        now = datetime.now(eastern)
-
-        # Format without leading zeros for hours
-        if eastern_time.date() != now.date():
-            # For different days, include date with non-zero-padded month/day
-            return eastern_time.strftime("%-m/%-d\n%-I:%M %p")
-        else:
-            # For same day, just show time without leading zeros
-            return eastern_time.strftime("%-I:%M %p")
+        return eastern_time.strftime("%-I:%M %p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
@@ -86,7 +78,7 @@ async def create_price_chart(timeframe="1hr"):
         price_range = max_price - min_price
 
         try:
-            # Smaller font for time labels
+            # Load fonts
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
             price_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
         except Exception as e:
