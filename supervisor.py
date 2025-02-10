@@ -35,9 +35,20 @@ class BotSupervisor:
                     logger.warning("Bot connection is closed")
                     await self.handle_disconnection(bot)
                 else:
-                    self.consecutive_failures = 0
-                    self.last_heartbeat = datetime.now()
-                    logger.info("Bot heartbeat: Connection healthy")
+                    # Verify bot is actually responding
+                    try:
+                        # Attempt to fetch bot latency as connection test
+                        latency = bot.latency
+                        if latency > 1.0:  # High latency threshold (1 second)
+                            logger.warning(f"High latency detected: {latency:.2f}s")
+                            await self.handle_disconnection(bot)
+                        else:
+                            self.consecutive_failures = 0
+                            self.last_heartbeat = datetime.now()
+                            logger.info(f"Bot heartbeat: Connection healthy (latency: {latency:.2f}s)")
+                    except Exception as e:
+                        logger.error(f"Error checking bot status: {str(e)}")
+                        await self.handle_disconnection(bot)
 
                 # Proactive memory management
                 memory_percent = self.process.memory_percent()
@@ -52,6 +63,7 @@ class BotSupervisor:
     async def handle_disconnection(self, bot):
         """Handle bot disconnection with progressive backoff."""
         self.consecutive_failures += 1
+        logger.warning(f"Handling disconnection (attempt {self.consecutive_failures})")
 
         # Check restart cooldown
         time_since_restart = (datetime.now() - self.last_restart).total_seconds()
@@ -91,7 +103,9 @@ class BotSupervisor:
             self.cleanup_resources()
             gc.collect()  # Force garbage collection
 
-            await bot.close()
+            # Ensure bot is properly closed
+            if not bot.is_closed():
+                await bot.close()
             logger.info("Bot connection closed for emergency restart")
 
             # Reduced cooldown for emergency restart
@@ -101,14 +115,15 @@ class BotSupervisor:
             self.consecutive_failures = 0
             self.last_restart = datetime.now()
 
-            # Attempt restart
+            # Attempt restart with fresh connection
             await bot.start(bot.http.token, reconnect=True)
             logger.info("Emergency restart completed successfully")
 
         except Exception as e:
             logger.critical(f"Emergency restart failed: {str(e)}")
-            # Let the process manager handle restart
-            sys.exit(1)
+            logger.exception("Full traceback:")
+            # Force process restart
+            os._exit(1)
 
     def cleanup_resources(self):
         """Clean up system resources."""

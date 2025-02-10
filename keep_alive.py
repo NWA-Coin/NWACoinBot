@@ -21,32 +21,18 @@ def home():
 def run():
     """Run the Flask app"""
     try:
-        # Try different ports if default is in use
-        ports = [8000, 8001, 8002, 8080]
+        # Must use PORT from environment for Replit
+        port = int(os.environ.get('PORT', '8080'))
+        logger.info(f"Starting unified server on port {port}")
 
-        for port in ports:
-            try:
-                logger.info(f"Attempting to start Flask server on port {port}")
-
-                # Configure Flask for production use on Replit
-                app.config['ENV'] = 'production'
-                app.config['DEBUG'] = False
-
-                # Start server with improved production settings
-                app.run(
-                    host='0.0.0.0',
-                    port=port,
-                    debug=False,
-                    use_reloader=False,
-                    threaded=True
-                )
-                return True
-            except OSError as e:
-                logger.warning(f"Port {port} is in use, trying next port")
-                continue
-
-        logger.error("No available ports found")
-        return False
+        app.run(
+            host='0.0.0.0',  # Required for external access
+            port=port,
+            debug=False,
+            use_reloader=False,
+            threaded=True
+        )
+        return True
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         logger.exception("Full traceback:")

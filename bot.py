@@ -82,12 +82,6 @@ async def on_disconnect():
     logger.warning("Bot disconnected. Attempting to reconnect...")
 
 @bot.event
-async def on_error(event, *args, **kwargs):
-    """Handle any uncaught exceptions"""
-    logger.error(f'Error in {event}:')
-    logger.exception('Traceback:')
-
-@bot.event
 async def on_message(message):
     """Handle incoming messages with improved error handling"""
     if message.author == bot.user:
@@ -109,6 +103,11 @@ async def on_message(message):
             await message.channel.send("❌ Error processing command. Please try again.")
 
 @bot.event
+async def on_command(ctx):
+    """Log when commands are used"""
+    logger.info(f'Command "{ctx.command}" used by {ctx.author} in {ctx.guild}')
+
+@bot.event
 async def on_command_error(ctx, error):
     """Handle command errors gracefully"""
     logger.error(f"Command error occurred: {str(error)}")
@@ -119,6 +118,13 @@ async def on_command_error(ctx, error):
     else:
         logger.error(f'Error in command "{ctx.command}": {str(error)}')
         await ctx.send("❌ Command failed! Try !help to see available commands.")
+
+# Enhanced error event handler
+@bot.event
+async def on_error(event, *args, **kwargs):
+    """Handle any uncaught exceptions"""
+    logger.error(f'Error in {event}:')
+    logger.exception('Traceback:')
 
 @bot.command(name='ping')
 @commands.cooldown(1, 2, commands.BucketType.user)  # Rate limit: 1 use per 2 seconds per user
