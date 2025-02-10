@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import logging
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
 import signal
 import atexit
@@ -16,7 +16,7 @@ from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from supervisor import BotSupervisor
 
-# Set up logging with a single handler
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -47,120 +47,32 @@ bot = commands.Bot(
 # Remove default help command
 bot.remove_command('help')
 
-# Constants for health monitoring
-HEALTH_CHECK_INTERVAL = 30  # seconds
-HEALTH_CHECK_PORTS = [8080, 8000, 5000]  # Possible keep-alive server ports
-MAX_STARTUP_RETRIES = 5
-STARTUP_RETRY_DELAY = 5  # seconds
-
-async def wait_for_keep_alive_server():
-    """Wait for keep-alive server to be ready"""
-    logger.info("Waiting for keep-alive server to start...")
-    retries = 0
-
-    while retries < MAX_STARTUP_RETRIES:
-        for port in HEALTH_CHECK_PORTS:
-            try:
-                # Try to connect to keep-alive server
-                response = requests.get(f"http://localhost:{port}/")
-                if response.status_code == 200 and response.text == "Bot is alive!":
-                    logger.info(f"Keep-alive server found on port {port}")
-                    return True
-            except requests.RequestException:
-                pass
-
-        retries += 1
-        if retries < MAX_STARTUP_RETRIES:
-            logger.warning(f"Keep-alive server not ready, retry {retries}/{MAX_STARTUP_RETRIES}")
-            await asyncio.sleep(STARTUP_RETRY_DELAY)
-
-    logger.error("Failed to connect to keep-alive server")
-    return False
-
-async def initialize_bot():
-    """Initialize bot with proper startup sequence"""
-    try:
-        # Start the keep-alive server
-        if not keep_alive():
-            logger.error("Failed to start keep-alive server")
-            return False
-
-        # Wait for keep-alive server to be ready
-        if not await wait_for_keep_alive_server():
-            logger.error("Keep-alive server failed to start")
-            return False
-
-        # Start supervisor monitoring
-        supervisor = BotSupervisor()
-        supervisor.setup_signal_handlers()
-        bot.loop.create_task(supervisor.monitor(bot))
-
-        return True
-    except Exception as e:
-        logger.error(f"Error during bot initialization: {str(e)}")
-        return False
-
+@bot.event
 async def on_ready():
-    """Called when the bot successfully connects/reconnects"""
-    global reconnect_attempts, last_heartbeat
-    reconnect_attempts = 0  # Reset counter on successful connection
-    last_heartbeat = datetime.now()
-
+    """Called when the bot successfully connects"""
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
     logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
-    # Start supervisor monitoring
-    bot.loop.create_task(supervisor.monitor(bot))
-    logger.info("Started bot supervisor monitoring")
-
-async def monitor_heartbeat():
-    """Monitor bot's heartbeat and force reconnect if needed"""
-    global last_heartbeat, reconnect_attempts
-    while True:
-        try:
-            await asyncio.sleep(30)  # Check every 30 seconds
-            if datetime.now() - last_heartbeat > timedelta(seconds=HEARTBEAT_TIMEOUT):
-                logger.warning(f"No heartbeat detected for {HEARTBEAT_TIMEOUT} seconds")
-                await handle_disconnection()
-        except Exception as e:
-            logger.error(f"Error in heartbeat monitor: {str(e)}")
-            await asyncio.sleep(5)
-
-async def handle_disconnection():
-    """Handle bot disconnection with exponential backoff"""
-    global reconnect_attempts
-    try:
-        reconnect_attempts += 1
-        delay = min(RECONNECT_BASE_DELAY * (2 ** (reconnect_attempts - 1)), MAX_RECONNECT_DELAY)
-        logger.info(f"Attempting reconnection (attempt {reconnect_attempts}) after {delay}s delay")
-
-        if not bot.is_closed():
-            await bot.close()  # Clean disconnect if needed
-
-        await asyncio.sleep(delay)
-
-        if bot.is_closed():
-            # Force restart the entire bot if needed
-            await bot.start(TOKEN, reconnect=True)
-            logger.info("Bot successfully reconnected")
-            await update_bot_status()
-    except Exception as e:
-        logger.error(f"Reconnection attempt failed: {str(e)}")
-        await asyncio.sleep(5)
+    await bot.change_presence(
+        activity=discord.Game(name="!help | Roasting LUX"),
+        status=discord.Status.online
+    )
 
 @bot.event
 async def on_resumed():
     """Log when the bot resumes a session after disconnect"""
     logger.info("Bot resumed connection")
-    await update_bot_status()
+    await bot.change_presence(
+        activity=discord.Game(name="!help | Roasting LUX"),
+        status=discord.Status.online
+    )
 
 @bot.event
 async def on_disconnect():
-    """Log disconnection and attempt immediate reconnect"""
+    """Log disconnection"""
     logger.warning("Bot disconnected. Attempting to reconnect...")
-    await asyncio.sleep(1)  # Brief delay before next attempt
 
 @bot.event
 async def on_error(event, *args, **kwargs):
@@ -203,14 +115,6 @@ async def on_command_error(ctx, error):
         logger.error(f'Error in command "{ctx.command}": {str(error)}')
         await ctx.send("❌ Command failed! Try !help to see available commands.")
 
-async def update_bot_status():
-    """Update bot status to online with activity"""
-    await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting LUX"),
-        status=discord.Status.online
-    )
-
-# Add enhanced logging to ping command for better visibility
 @bot.command(name='ping')
 @commands.cooldown(1, 2, commands.BucketType.user)  # Rate limit: 1 use per 2 seconds per user
 async def ping(ctx):
@@ -236,7 +140,10 @@ async def roast(ctx):
     """Generate a savage roast"""
     logger.info(f'Executing roast command for {ctx.author}')
     try:
-        await update_bot_status()
+        await bot.change_presence(
+            activity=discord.Game(name="!help | Roasting LUX"),
+            status=discord.Status.online
+        )
         logger.info("Sending initial response...")
         message = await ctx.send("🔥 Generating savage NWA roast...")
 
@@ -257,7 +164,10 @@ async def meme(ctx, timeframe: str = "1hr"):
     """Generate price chart meme with specified timeframe"""
     logger.info(f'Starting meme command execution for {ctx.author} with timeframe {timeframe}')
     try:
-        await update_bot_status()
+        await bot.change_presence(
+            activity=discord.Game(name="!help | Roasting LUX"),
+            status=discord.Status.online
+        )
 
         # Validate timeframe
         valid_timeframes = {"5m", "15m", "1hr"}
@@ -309,7 +219,10 @@ async def crash(ctx):
     """Get current crash stats from price data"""
     logger.info(f'Executing crash command for {ctx.author}')
     try:
-        await update_bot_status()
+        await bot.change_presence(
+            activity=discord.Game(name="!help | Roasting LUX"),
+            status=discord.Status.online
+        )
         message = await ctx.send("💥 Fetching latest LUX crash data...")
 
         logger.info("Attempting to fetch price history")
@@ -342,7 +255,10 @@ async def crash(ctx):
 async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
-    await update_bot_status()
+    await bot.change_presence(
+        activity=discord.Game(name="!help | Roasting LUX"),
+        status=discord.Status.online
+    )
     help_text = """
 🔥 **$LUXSUX Bot Commands** 🔥
 • `!ping` - Check if bot is active
@@ -380,28 +296,44 @@ signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
 
+async def main():
+    """Main async entry point"""
+    try:
+        # Start the keep-alive server
+        if not keep_alive():
+            logger.error("Failed to start keep-alive server")
+            return
+
+        # Initialize supervisor
+        supervisor = BotSupervisor()
+        supervisor.setup_signal_handlers()
+
+        # Start the bot
+        async with bot:
+            bot.loop.create_task(supervisor.monitor(bot))
+            await bot.start(TOKEN)
+
+    except Exception as e:
+        logger.critical(f"Critical error in main: {str(e)}")
+        logger.exception("Full traceback:")
+        return
+
 if __name__ == "__main__":
     try:
-        logger.info("Starting bot initialization sequence...")
-
-        # Run initialization in event loop
-        loop = asyncio.get_event_loop()
-        if not loop.run_until_complete(initialize_bot()):
-            logger.critical("Bot initialization failed")
-            sys.exit(1)
-
-        logger.info("Starting bot with enhanced supervision...")
-        bot.run(TOKEN)
+        logger.info("Starting bot...")
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
     except Exception as e:
-        logger.critical(f"Critical bot error: {str(e)}")
+        logger.critical(f"Failed to start bot: {str(e)}")
         logger.exception("Full traceback:")
-        sys.exit(1)  # Let the process manager handle restart
+    finally:
+        logger.info("Bot shutdown complete")
 
-# Constants for reconnection handling
+# Constants for reconnection handling (moved to the end for better organization)
 KEEP_ALIVE_INTERVAL = 30  # Increased to reduce unnecessary checks
 HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
 RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
 last_heartbeat = datetime.now()
 reconnect_attempts = 0
 MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
-bot.loop.create_task(monitor_heartbeat())
