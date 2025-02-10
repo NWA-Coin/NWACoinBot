@@ -8,16 +8,27 @@ from price_chart import create_price_chart
 logger = logging.getLogger('discord_bot')
 
 async def generate_meme(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None, show_takeover_line=False):
-    """Generate a price chart meme."""
+    """Generate a price chart meme.
+
+    Args:
+        timeframe (str): Time period for chart (1hr, 24hr, 7d, 1m, 3m)
+        token_id (str): CoinGecko token ID or contract address
+        token_symbol (str): Token symbol for display
+        entry_price (float, optional): Entry price for takeover line
+        show_takeover_line (bool): Whether to show NWA takeover line
+    """
     try:
         logger.info(f"Starting meme generation for {token_symbol} with timeframe {timeframe}")
+
+        # Only use entry_price if show_takeover_line is True
+        chart_entry_price = entry_price if show_takeover_line else None
 
         # Generate price chart and get price data
         chart_path, timestamps, prices = await create_price_chart(
             timeframe=timeframe,
             token_id=token_id,
             token_symbol=token_symbol,
-            entry_price=entry_price,
+            entry_price=chart_entry_price,
             show_takeover_line=show_takeover_line
         )
 

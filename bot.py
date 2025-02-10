@@ -398,7 +398,7 @@ async def crash(ctx):
 @bot.command(name='linkwallet')
 @commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
 async def link_wallet(ctx, wallet_address: str = None):
-    """Link your NWA wallet to your Discord account"""
+    """Link your wallet to your Discord account"""
     if not wallet_manager:
         await ctx.send("❌ Wallet system is currently unavailable")
         return
@@ -413,10 +413,10 @@ async def link_wallet(ctx, wallet_address: str = None):
         if success:
             # Result contains verification code
             message = (
-                f"🔗 Linking NWA wallet `{wallet_address}`\n\n"
-                f"To verify ownership, send `0` SOL to this same wallet with this memo:\n"
+                f"🔗 Linking wallet `{wallet_address}`\n\n"
+                f"To verify ownership, please use this code:\n"
                 f"`{result}`\n\n"
-                f"Then use `!verifywallet {result}` to complete verification"
+                f"Use `!verifywallet {result}` to complete verification"
             )
             # Send verification instructions in DM for privacy
             try:
@@ -483,8 +483,8 @@ async def list_wallet(ctx):
 
 @bot.command(name='updatebalance')
 @commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
-async def force_update_balance(ctx):
-    """Force update your NWA token balance"""
+async def force_update_balance(ctx, contract_address: str = None):
+    """Force update your token balance. Optionally specify a contract address to check other tokens."""
     if not wallet_manager:
         await ctx.send("❌ Wallet system is currently unavailable")
         return
@@ -493,19 +493,25 @@ async def force_update_balance(ctx):
         wallet = await wallet_manager.get_user_wallet(ctx.author.id)
 
         if not wallet:
-            await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
+            await ctx.send("🏦 You don't have a verified wallet linked. Use !linkwallet to link one!")
             return
 
-        message = await ctx.send("💰 Forcing balance update from blockchain...")
+        message = await ctx.send("💰 Fetching balance from blockchain...")
 
         # Force update the balance
-        success, new_balance = await wallet_manager.force_balance_update(ctx.author.id)
+        success, new_balance = await wallet_manager.force_balance_update(ctx.author.id, contract_address)
 
         if success and new_balance is not None:
-            await message.edit(content=f"✅ Balance updated! Current balance: `{int(new_balance):,} NWA`")
-            logger.info(f"Force updated balance to {new_balance:,} NWA tokens for user {ctx.author.id}")
+            token_name = "NWA" if not contract_address else contract_address[:8] + "..."
+            balance_msg = f"✅ Balance updated!\n"
+            balance_msg += f"Current balance: `{int(new_balance):,} {token_name}`\n"
+            if contract_address :
+                balance_msg += f"Contract: `{contract_address}`"
+
+            await message.edit(content=balance_msg)
+            logger.info(f"Force updated balance to {new_balance:,} tokens for user {ctx.author.id}")
         else:
-            await message.edit(content="❌ Failed to update balance. Please try again later.")
+            await message.edit(content="❌ Failed to fetch balance. Please verify the contract address is correct.")
     except Exception as e:
         logger.error(f"Error in force_update_balance command: {str(e)}")
         await ctx.send("❌ Failed to update balance info")
@@ -513,7 +519,7 @@ async def force_update_balance(ctx):
 @bot.command(name='balance')
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
 async def check_balance(ctx):
-    """Check your NWA token balance"""
+    """Check your token balance"""
     if not wallet_manager:
         await ctx.send("❌ Wallet system is currently unavailable")
         return
@@ -522,11 +528,11 @@ async def check_balance(ctx):
         wallet = await wallet_manager.get_user_wallet(ctx.author.id)
 
         if not wallet:
-            await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
+            await ctx.send("🏦 You don't have a verified wallet linked. Use !linkwallet to link one!")
             return
 
         # Update balance before displaying
-        message = await ctx.send("💰 Checking your NWA balance...")
+        message = await ctx.send("💰 Checking your token balance...")
         await wallet_manager.update_wallet_balance(ctx.author.id)
 
         # Get fresh wallet data after update
@@ -545,11 +551,12 @@ async def check_balance(ctx):
             f"💰 Your NWA Balance:\n"
             f"Amount: `{token_balance:,} NWA`\n"
             f"Last Updated: {update_str}\n"
-            f"Use `!updatebalance` to force an update"
+            f"Use `!updatebalance` to force an update\n"
+            f"Use `!updatebalance <contract>` to check other tokens"
         )
 
         await message.edit(content=balance_msg)
-        logger.info(f"Displayed balance of {token_balance:,} NWA tokens for user {ctx.author.id}")
+        logger.info(f"Displayed balance of {token_balance:,} tokens for user {ctx.author.id}")
     except Exception as e:
         logger.error(f"Error in check_balance command: {str(e)}")
         await ctx.send("❌ Failed to retrieve balance info")
@@ -693,11 +700,6 @@ async def end_giveaway(ctx):
 @bot.command(name='help')
 async def help_command(ctx):
     """Show available commands"""
-    logger.info(f'Executing help command for {ctx.author}')
-    await bot.change_presence(
-        activity=discord.Game(name="!help | NWA Token"),
-        status=discord.Status.online
-    )
     help_text = """
 🔥 **NWA Bot Commands** 🔥
 • `!ping` - Check if bot is active
@@ -713,7 +715,7 @@ async def help_command(ctx):
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
 • `!balance` - Check your NWA token balance
-• `!updatebalance` - Force update your token balance
+• `!updatebalance [contract]` - Force update balance (optional: specify token contract)
 • `!airdrop` - Check eligibility and claim airdrop
 
 🎉 **Giveaway Commands** 🎉
@@ -781,7 +783,7 @@ async def main():
             logger.info("Starting bot supervisor monitoring...")
             monitor_task = bot.loop.create_task(supervisor.monitor(bot))
 
-            logger.info("Starting bot with Discord token...")
+            logger.info("Starting botwith Discord token...")
             try:
                 await bot.start(TOKEN)
             except Exception as e:
@@ -792,7 +794,7 @@ async def main():
     except Exception as e:
         logger.critical(f"Critical error in main: {str(e)}")
         logger.exception("Full traceback:")
-        if notbot.is_closed():
+        if not bot.is_closed():
             await bot.close()
 
 def ensure_single_instance():
