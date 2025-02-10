@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import asyncio
 import signal
 import atexit
+import requests
 from keep_alive import keep_alive
 from roast_generator import generate_roast
 from meme_generator import generate_meme
@@ -46,14 +47,59 @@ bot = commands.Bot(
 # Remove default help command
 bot.remove_command('help')
 
-# Start the keep-alive server before bot initialization
-keep_alive()
+# Constants for health monitoring
+HEALTH_CHECK_INTERVAL = 30  # seconds
+HEALTH_CHECK_PORTS = [8080, 8000, 5000]  # Possible keep-alive server ports
+MAX_STARTUP_RETRIES = 5
+STARTUP_RETRY_DELAY = 5  # seconds
 
-# Initialize supervisor
-supervisor = BotSupervisor()
-supervisor.setup_signal_handlers()
+async def wait_for_keep_alive_server():
+    """Wait for keep-alive server to be ready"""
+    logger.info("Waiting for keep-alive server to start...")
+    retries = 0
 
-@bot.event
+    while retries < MAX_STARTUP_RETRIES:
+        for port in HEALTH_CHECK_PORTS:
+            try:
+                # Try to connect to keep-alive server
+                response = requests.get(f"http://localhost:{port}/")
+                if response.status_code == 200 and response.text == "Bot is alive!":
+                    logger.info(f"Keep-alive server found on port {port}")
+                    return True
+            except requests.RequestException:
+                pass
+
+        retries += 1
+        if retries < MAX_STARTUP_RETRIES:
+            logger.warning(f"Keep-alive server not ready, retry {retries}/{MAX_STARTUP_RETRIES}")
+            await asyncio.sleep(STARTUP_RETRY_DELAY)
+
+    logger.error("Failed to connect to keep-alive server")
+    return False
+
+async def initialize_bot():
+    """Initialize bot with proper startup sequence"""
+    try:
+        # Start the keep-alive server
+        if not keep_alive():
+            logger.error("Failed to start keep-alive server")
+            return False
+
+        # Wait for keep-alive server to be ready
+        if not await wait_for_keep_alive_server():
+            logger.error("Keep-alive server failed to start")
+            return False
+
+        # Start supervisor monitoring
+        supervisor = BotSupervisor()
+        supervisor.setup_signal_handlers()
+        bot.loop.create_task(supervisor.monitor(bot))
+
+        return True
+    except Exception as e:
+        logger.error(f"Error during bot initialization: {str(e)}")
+        return False
+
 async def on_ready():
     """Called when the bot successfully connects/reconnects"""
     global reconnect_attempts, last_heartbeat
@@ -336,6 +382,14 @@ signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":
     try:
+        logger.info("Starting bot initialization sequence...")
+
+        # Run initialization in event loop
+        loop = asyncio.get_event_loop()
+        if not loop.run_until_complete(initialize_bot()):
+            logger.critical("Bot initialization failed")
+            sys.exit(1)
+
         logger.info("Starting bot with enhanced supervision...")
         bot.run(TOKEN)
     except Exception as e:
@@ -350,3 +404,4 @@ RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
 last_heartbeat = datetime.now()
 reconnect_attempts = 0
 MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+bot.loop.create_task(monitor_heartbeat())
