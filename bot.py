@@ -17,11 +17,14 @@ from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
 
-# Set up logging with more detail for connection issues
+# Set up logging with more detail for connection issues and file logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
 )
 logger = logging.getLogger('discord_bot')
 
@@ -354,18 +357,29 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 async def main():
-    """Main async entry point"""
+    """Main async entry point with enhanced error handling and initialization"""
     try:
-        logger.info("Starting bot initialization...")
+        logger.info("Starting bot initialization sequence...")
 
-        # Start the keep-alive server in a separate thread
-        logger.info("Starting keep-alive server...")
+
+        # First, try to start the keep-alive server
+        logger.info("Attempting to start keep-alive server...")
         server_started = keep_alive()
+        retries = 3
+
+        while not server_started and retries > 0:
+            logger.warning(f"Keep-alive server failed to start, retrying... ({retries} attempts left)")
+            await asyncio.sleep(5)  # Wait before retry
+            server_started = keep_alive()
+            retries -= 1
+
         if not server_started:
-            logger.error("Failed to start keep-alive server")
+            logger.error("Failed to start keep-alive server after all retries")
             return
 
-        # Initialize supervisor
+        logger.info("Keep-alive server started successfully")
+
+        # Initialize supervisor with enhanced monitoring
         supervisor = BotSupervisor()
         supervisor.setup_signal_handlers()
 
@@ -395,7 +409,7 @@ MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting bot...")
+        logger.info("Starting bot initialization from main...")
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt")
