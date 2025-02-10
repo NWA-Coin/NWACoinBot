@@ -33,25 +33,14 @@ def format_price_label(price):
     cents = price * 100
     return f"{cents:.2f}¢"  # Keeping the 2 decimal points
 
-def format_time_label(timestamp):
-    """Format time label in a human-friendly way with 15-minute intervals."""
+def format_time_label(timestamp, timeframe="1hr"):
+    """Format time label with standardized intervals and dates."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
-        now = datetime.now(eastern)
 
-        # Round to nearest 15 minutes
-        minutes = eastern_time.minute
-        rounded_minutes = round(minutes / 15) * 15
-        eastern_time = eastern_time.replace(minute=rounded_minutes, second=0, microsecond=0)
-
-        # Format without leading zeros for hours
-        if eastern_time.date() != now.date():
-            # For different days, include date with non-zero-padded month/day
-            return eastern_time.strftime("%-m/%-d\n%-I:%M %p")
-        else:
-            # For same day, just show time without leading zeros
-            return eastern_time.strftime("%-I:%M %p")
+        # Format with date for all timestamps
+        return eastern_time.strftime("%-m/%-d\n%-I:%M %p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
@@ -65,6 +54,12 @@ async def create_price_chart(timeframe="1hr"):
         if not timestamps or not prices:
             logger.error("Failed to get price data")
             return None, None, None
+
+        # Ensure data ends at current time
+        current_time = int(datetime.now().timestamp() * 1000)
+        if timestamps[-1] < current_time:
+            timestamps.append(current_time)
+            prices.append(prices[-1])  # Use last known price
 
         # Log price data for debugging
         logger.info(f"Price data points: {len(prices)}")
@@ -91,7 +86,7 @@ async def create_price_chart(timeframe="1hr"):
         price_range = max_price - min_price
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             font = ImageFont.load_default()
@@ -109,13 +104,21 @@ async def create_price_chart(timeframe="1hr"):
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=font)
 
+        # Determine number of time labels based on timeframe
+        if timeframe == "5m":
+            num_labels = 12  # Every 30 minutes
+        elif timeframe == "15m":
+            num_labels = 8   # Hourly
+        else:  # 1hr
+            num_labels = 6   # Every 4 hours
+
         # Draw time labels and vertical grid lines
-        num_labels = 6
+        time_interval = (timestamps[-1] - timestamps[0]) / (num_labels - 1)
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
-            timestamp = timestamps[0] + (i * (timestamps[-1] - timestamps[0]) / (num_labels - 1))
+            timestamp = timestamps[0] + (i * time_interval)
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
-            time_str = format_time_label(timestamp)
+            time_str = format_time_label(timestamp, timeframe)
             draw.text((x - 25, height - bottom_padding + 20), time_str, fill=label_color, font=font)
 
         # Draw price line
