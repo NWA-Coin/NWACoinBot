@@ -104,8 +104,8 @@ async def create_price_chart(timeframe="1hr"):
         min_price = min(prices) * 0.95  # Add 5% padding
         price_range = max_price - min_price
 
+        # Load fonts with consistent size for all labels
         try:
-            # Load fonts with consistent size for all labels
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
             price_font = time_font  # Use same font for price labels
             crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)  # Larger for crash text
