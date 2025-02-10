@@ -2,11 +2,11 @@ import os
 import logging
 import asyncio
 import base58
+import aiohttp
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional, Tuple
-from market_data import get_solana_token_by_contract
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -14,7 +14,9 @@ logger = logging.getLogger('discord_bot')
 # Constants for token configuration
 TOKEN_CONTRACT = "J9RZefdNW9eTCiVPLtke5rashEUGeVaXLk7iWFTupump"  # NWADEV token contract
 MIN_HOLDING_AMOUNT = 100000  # Minimum tokens required for airdrop
-AIRDROP_AMOUNT = 10000      # Amount of tokens to airdrop
+
+# Solana API endpoints
+SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
 
 class WalletManager:
     def __init__(self):
@@ -22,7 +24,131 @@ class WalletManager:
         self.db_url = os.getenv('DATABASE_URL')
         self.setup_database()
         logger.info(f"WalletManager initialized with TOKEN_CONTRACT: {TOKEN_CONTRACT}")
-        logger.info(f"Airdrop settings - Min holding: {MIN_HOLDING_AMOUNT}, Amount: {AIRDROP_AMOUNT}")
+        logger.info(f"Min holding amount: {MIN_HOLDING_AMOUNT}")
+
+    async def get_token_balance(self, wallet_address: str) -> Optional[float]:
+        """Get token balance for a Solana wallet"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                # First get all token accounts for the wallet
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getTokenAccountsByOwner",
+                    "params": [
+                        wallet_address,
+                        {
+                            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"  # Solana Token Program ID
+                        },
+                        {"encoding": "jsonParsed"}
+                    ]
+                }
+
+                logger.info(f"Querying token accounts for wallet: {wallet_address}")
+                async with session.post(SOLANA_RPC_URL, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if 'result' in data and 'value' in data['result']:
+                            # Search through all token accounts for our specific token
+                            for account in data['result']['value']:
+                                try:
+                                    parsed_data = account['account']['data']['parsed']
+                                    if 'info' in parsed_data:
+                                        info = parsed_data['info']
+                                        # Check if this account holds our token
+                                        if info['mint'].lower() == TOKEN_CONTRACT.lower():
+                                            # Get the token amount, accounting for decimals
+                                            amount = float(info['tokenAmount']['uiAmount'])
+                                            logger.info(f"Found NWADEV balance for {wallet_address}: {amount}")
+                                            return amount
+                                except (KeyError, ValueError) as e:
+                                    logger.error(f"Error parsing account data: {str(e)}")
+                                    continue
+
+                            logger.info(f"No NWADEV tokens found for wallet: {wallet_address}")
+                            return 0.0
+                        else:
+                            logger.error("Invalid response format from Solana RPC")
+                            logger.debug(f"Response data: {data}")
+                            return None
+                    else:
+                        logger.error(f"Failed to get token accounts: {response.status}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error getting token balance: {str(e)}")
+            logger.exception("Full traceback:")
+            return None
+
+    async def update_wallet_balance(self, discord_id: int) -> bool:
+        """Update wallet token balance from Solana blockchain"""
+        try:
+            wallet = await self.get_user_wallet(discord_id)
+            if not wallet:
+                logger.warning(f"No verified wallet found for discord_id {discord_id}")
+                return False
+
+            logger.info(f"Updating balance for wallet: {wallet['wallet_address']}")
+            balance = await self.get_token_balance(wallet['wallet_address'])
+
+            if balance is not None:
+                with psycopg2.connect(self.db_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE wallet_links 
+                            SET token_balance = %s,
+                                last_balance_update = NOW()
+                            WHERE discord_id = %s AND verified = TRUE
+                            RETURNING wallet_address
+                        """, (balance, discord_id))
+
+                        result = cur.fetchone()
+                        conn.commit()
+
+                        if result:
+                            logger.info(f"Updated balance for {result[0]} to {balance} NWADEV tokens")
+                            return True
+                        else:
+                            logger.warning(f"No wallet record found to update for discord_id {discord_id}")
+                            return False
+            else:
+                logger.error("Could not fetch current balance from Solana")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating wallet balance: {str(e)}")
+            logger.exception("Full traceback:")
+            return False
+
+    async def check_airdrop_eligibility(self, discord_id: int) -> Tuple[bool, Optional[float], bool]:
+        """Check if user is eligible for airdrop"""
+        try:
+            # First update the wallet balance
+            if not await self.update_wallet_balance(discord_id):
+                return False, None, False
+
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT wallet_address, token_balance, airdrop_claimed
+                        FROM wallet_links 
+                        WHERE discord_id = %s AND verified = TRUE
+                    """, (discord_id,))
+
+                    result = cur.fetchone()
+                    if result:
+                        token_balance = float(result['token_balance'])
+                        eligible = token_balance >= MIN_HOLDING_AMOUNT and not result['airdrop_claimed']
+                        logger.info(f"Eligibility check - Balance: {token_balance}, Required: {MIN_HOLDING_AMOUNT}, Eligible: {eligible}")
+                        return True, token_balance, eligible
+
+                    logger.warning(f"No verified wallet found for discord_id {discord_id}")
+                    return False, None, False
+
+        except Exception as e:
+            logger.error(f"Error checking airdrop eligibility: {str(e)}")
+            logger.exception("Full traceback:")
+            return False, None, False
 
     def setup_database(self):
         """Create necessary tables if they don't exist"""
@@ -82,34 +208,6 @@ class WalletManager:
         except Exception as e:
             logger.error(f"Error updating token balance: {str(e)}")
             return False
-
-    async def check_airdrop_eligibility(self, discord_id: int) -> Tuple[bool, Optional[float], Optional[str]]:
-        """Check if user is eligible for airdrop"""
-        try:
-            with psycopg2.connect(self.db_url) as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Updated query to include all necessary fields
-                    cur.execute("""
-                        SELECT wallet_address, token_balance, airdrop_eligible, airdrop_claimed
-                        FROM wallet_links 
-                        WHERE discord_id = %s AND verified = TRUE
-                    """, (discord_id,))
-
-                    result = cur.fetchone()
-                    logger.info(f"Airdrop eligibility check result: {result}")
-
-                    if result:
-                        eligible = result['token_balance'] >= MIN_HOLDING_AMOUNT and not result['airdrop_claimed']
-                        token_balance = float(result['token_balance'])
-                        return True, token_balance, eligible
-
-                    logger.warning(f"No verified wallet found for discord_id {discord_id}")
-                    return False, None, None
-
-        except Exception as e:
-            logger.error(f"Error checking airdrop eligibility: {str(e)}")
-            logger.exception("Full traceback:")
-            return False, None, None
 
     async def process_airdrop(self, discord_id: int) -> Tuple[bool, str]:
         """Process airdrop for eligible users"""

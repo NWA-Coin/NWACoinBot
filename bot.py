@@ -13,7 +13,9 @@ from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
-from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT, AIRDROP_AMOUNT
+from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT
+import fcntl
+import errno
 
 # Update the logging configuration at the top of bot.py
 logging.basicConfig(
@@ -422,7 +424,7 @@ async def check_balance(ctx):
 @bot.command(name='airdrop')
 @commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
 async def check_airdrop(ctx):
-    """Check airdrop eligibility and claim if eligible"""
+    """Check airdrop eligibility based on token holdings"""
     if not wallet_manager:
         await ctx.send("❌ Wallet system is currently unavailable")
         return
@@ -438,27 +440,22 @@ async def check_airdrop(ctx):
         success, balance, eligible = await wallet_manager.check_airdrop_eligibility(ctx.author.id)
 
         if not success:
-            await ctx.send("❌ Error checking airdrop eligibility")
+            await ctx.send("❌ Error checking token balance")
             return
 
-        if not eligible:
-            if balance and balance >= MIN_HOLDING_AMOUNT:
-                await ctx.send("You've already claimed your airdrop! 🎉")
-            else:
-                await ctx.send(f"❌ Not eligible for airdrop. You need to hold at least {MIN_HOLDING_AMOUNT:,} tokens to qualify!")
+        if balance is None:
+            await ctx.send("❌ Could not retrieve your token balance. Please try again later.")
             return
 
-        # Process airdrop for eligible users
-        success, message = await wallet_manager.process_airdrop(ctx.author.id)
-
-        if success:
-            await ctx.send(f"🎉 Congratulations! {message}")
+        # Format response based on balance
+        if balance >= MIN_HOLDING_AMOUNT:
+            await ctx.send(f"✅ Your wallet holds {balance:,.0f} NWADEV tokens, which meets the minimum requirement of {MIN_HOLDING_AMOUNT:,} tokens!")
         else:
-            await ctx.send(f"❌ {message}")
+            await ctx.send(f"❌ Your wallet holds {balance:,.0f} NWADEV tokens. You need at least {MIN_HOLDING_AMOUNT:,} tokens to qualify!")
 
     except Exception as e:
         logger.error(f"Error in airdrop command: {str(e)}")
-        await ctx.send("❌ Error processing airdrop request")
+        await ctx.send("❌ Error processing eligibility check")
 
 @bot.command(name='help')
 async def help_command(ctx):
@@ -558,8 +555,23 @@ async def main():
         if not bot.is_closed():
             await bot.close()
 
+def ensure_single_instance():
+    """Ensure only one instance of the bot is running"""
+    try:
+        lockfile = open("/tmp/discord_bot.lock", "w")
+        fcntl.lockf(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lockfile
+    except IOError as e:
+        if e.errno == errno.EAGAIN:
+            logger.error("Another instance of the bot is already running")
+            sys.exit(1)
+        raise
+
 if __name__ == "__main__":
     try:
+        # Ensure single instance
+        lock = ensure_single_instance()
+
         logger.info("Starting bot main sequence...")
         asyncio.run(main())
     except KeyboardInterrupt:
