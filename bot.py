@@ -4,12 +4,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 import sys
-import time
 from datetime import datetime
 import asyncio
 import signal
-import atexit
-import requests
 from keep_alive import keep_alive
 from roast_generator import generate_roast
 from meme_generator import generate_meme
@@ -17,7 +14,7 @@ from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
 
-# Set up logging with more detail for connection issues and file logging
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -33,26 +30,19 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     logger.error("No Discord token found!")
-    exit(1)
-else:
-    logger.info("Discord token loaded successfully")
+    sys.exit(1)
 
-# Bot setup with enhanced reconnect settings
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True  # Enable guild-related events
-intents.messages = True  # Enable message-related events
-logger.info("Setting up bot with intents: message_content=%s, guilds=%s, messages=%s",
-           intents.message_content, intents.guilds, intents.messages)
+intents.guilds = True
+intents.messages = True
 
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
     reconnect=True,
-    case_insensitive=True,
-    max_messages=10000,
-    chunk_guilds_at_startup=False,
-    heartbeat_timeout=150.0
+    case_insensitive=True
 )
 
 # Remove default help command
@@ -64,7 +54,6 @@ async def on_ready():
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
-    logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
     await bot.change_presence(
         activity=discord.Game(name="!help | Roasting Crypto"),
@@ -357,79 +346,34 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 async def main():
-    """Main async entry point with enhanced error handling and initialization"""
+    """Main async entry point"""
     try:
-        logger.info("Starting bot initialization sequence...")
-
-        # First, try to start the keep-alive server with retries
-        logger.info("Attempting to start keep-alive server...")
-        server_port = None
-        max_retries = 3
-        retry_count = 0
-
-        while server_port is None and retry_count < max_retries:
-            try:
-                server_port = keep_alive()
-                if server_port is None:
-                    retry_count += 1
-                    logger.warning(f"Keep-alive server failed to start, attempt {retry_count}/{max_retries}")
-                    if retry_count < max_retries:
-                        await asyncio.sleep(5)  # Increased wait between retries
-            except Exception as e:
-                logger.error(f"Error starting keep-alive server (attempt {retry_count + 1}): {str(e)}")
-                retry_count += 1
-                if retry_count < max_retries:
-                    await asyncio.sleep(5)
-
-        if server_port is None:
-            logger.critical("Failed to start keep-alive server after all retries")
+        # Start keep-alive server
+        logger.info("Starting keep-alive server...")
+        server_port = keep_alive()
+        if not server_port:
+            logger.error("Failed to start keep-alive server")
             return
 
-        logger.info(f"Keep-alive server started successfully on port {server_port}")
+        logger.info(f"Keep-alive server started on port {server_port}")
 
-        # First remove any existing workflow
-        from workflows_remove_run_config_tool import workflows_remove_run_config_tool
-        workflows_remove_run_config_tool(name="Discord Bot")
-
-        # Configure workflow with the actual port
-        from workflows_set_run_config_tool import workflows_set_run_config_tool
-        workflows_set_run_config_tool(
-            name="Discord Bot",
-            command="python bot.py",
-            wait_for_port=server_port  # Now we pass the actual port
-        )
-
-        # Initialize supervisor with enhanced monitoring
+        # Initialize supervisor
         supervisor = BotSupervisor(server_port)
         supervisor.setup_signal_handlers()
 
-        # Register cleanup for graceful shutdown
-        atexit.register(cleanup)
-
-        # Start the bot with enhanced logging
-        logger.info("Attempting to connect to Discord...")
+        # Start the bot
         async with bot:
             bot.loop.create_task(supervisor.monitor(bot))
-            logger.info("Starting bot with token...")
             await bot.start(TOKEN)
 
     except Exception as e:
         logger.critical(f"Critical error in main: {str(e)}")
         logger.exception("Full traceback:")
-        await shutdown(bot)
-        return
-
-# Constants for reconnection handling
-KEEP_ALIVE_INTERVAL = 30  # Increased to reduce unnecessary checks
-HEARTBEAT_TIMEOUT = 120   # 2 minutes timeout
-RECONNECT_BASE_DELAY = 5  # Base delay for exponential backoff
-last_heartbeat = datetime.now()
-reconnect_attempts = 0
-MAX_RECONNECT_DELAY = 30  # Maximum seconds between reconnect attempts
+        if not bot.is_closed():
+            await bot.close()
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting bot initialization from main...")
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt")

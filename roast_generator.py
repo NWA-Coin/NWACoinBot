@@ -14,31 +14,31 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 # List of fallback roasts
 FALLBACK_ROASTS = [
     # Technical/Code Roasts
-    "LUX code looking like a bootcamp dropout's first project! Complete disaster! 💩👨‍💻",
-    "Can't even code a proper rugpull! NWA exposing this fraud! 🔥🤡",
-    "Another day of LUX smart contracts failing! Trash coder exposed! 🗑️💀",
-    "Stack Overflow won't save your shitcoin! Complete failure! ⚰️👨‍💻",
-    "Error 404: Coding skills not found! NWA stays winning! 🏆💯",
-    "Copy-pasting code won't save LUX! Another L for this fraud! 📝🗑️",
-    "Even ChatGPT writes better code! Complete failure! 🤖⚰️",
+    "Your shitty code looks like it was written by a drunk monkey! Complete disaster! 🤮💩",
+    "Can't even code a proper rugpull you incompetent f*ck! NWA destroying you! 🔥💀",
+    "Another day of your garbage smart contracts failing! Get rekt trash dev! 🗑️💩",
+    "Stack Overflow won't save your worthless shitcoin! Complete failure! ⚰️👨‍💻",
+    "Error 404: Coding skills not found, just like your liquidity! 📉💀",
+    "Copy-pasting code won't save your worthless token! Another L! 🗑️🤡",
+    "Even a brain-dead monkey codes better! Complete failure! 🐒💩",
 
     # Project/Price Roasts
-    "LUX chart looking like your credibility - straight to zero! 📉💩",
-    "NWA destroying your reputation while LUX dumps! Complete disaster! 🔥💀",
-    "Even your trading bot dumped LUX! Get exposed fraud! 🤖🗑️",
-    "Begging ChatGPT to pump LUX! Pathetic scammer! 🤮💸",
-    "Another day, another LUX rugpull! NWA stays winning! 🏆💰",
-    "Zero liquidity just like your trading skills! Complete failure! 💸📉",
-    "Imagine launching a token that only goes down! Pure comedy! 😂💩",
+    "LUX chart looking like your life - straight to the dumpster! 📉🗑️",
+    "NWA destroying your reputation while your mom dumps LUX! 🔥💀",
+    "Even your trading bot dumped this garbage! Get exposed fraud! 🤖🖕",
+    "Begging ChatGPT to pump your worthless token! Pathetic loser! 🤮💸",
+    "Another day, another LUX dump! NWA stays winning you clown! 🤡💩",
+    "Zero liquidity just like your brain cells! Complete disaster! 💸📉",
+    "Imagine launching a token that only goes down! Certified moron! 😂🗑️",
 
     # Mixed Content
-    "Failed code + zero liquidity = complete disaster! 💩📉",
-    "Error in trading bot: exit_scam.py failed! 🤖📉",
-    "NWA exposing your copy-pasted code! Another L! 🔥💻",
-    "Can't debug your way out of this one! 💻🐛",
-    "Pushed to main and the price crashed again! Complete failure! 💩💻",
-    "From junior dev to complete failure! Stay losing! 🤡👨‍💻",
-    "Commit history: 100% copypasta! Pure garbage! 💩💻"
+    "Failed code + zero liquidity = complete dumpster fire! 💩📉",
+    "Error in rugpull.py: exit_scam.failed()! Too stupid to scam! 🤖⚰️",
+    "NWA exposing your copy-pasted garbage! Stay getting rekt! 🔥💩",
+    "Can't debug your way out of being trash! Complete failure! 💻🗑️",
+    "Pushed to main and the price crashed again! Certified clown! 🤡💩",
+    "From junior dev to complete laughingstock! Stay losing trash! 🖕👨‍💻",
+    "Commit history: 100% stolen garbage! Pure trash! 💩🤮"
 ]
 
 async def get_crash_stats():
@@ -77,30 +77,36 @@ async def generate_roast():
                 messages=[
                     {
                         "role": "system",
-                        "content": f"""You are a savage roast generator for the Nick White Army (NWA).
-                        Create brutal roasts about LUX cryptocurrency focusing on technical and project failures.
+                        "content": f"""You are an extremely savage and vulgar roast generator for the Nick White Army (NWA).
+                        Create brutal, vulgar roasts about LUX cryptocurrency focusing on their complete failures.
                         Current stats: Down {crash_percent:.1f}%, price: {price_in_cents:.4f}¢
 
-                        Mix these roasting styles randomly:
-                        1. Technical: Mock incompetent programming and development failures
-                           - Broken smart contracts and failed deployments
-                           - Copy-pasted code and amateur mistakes
-                           - Failed code reviews and buggy commits
-                        2. Project: Mock LUX's technical disasters and price dumps
-                           - Zero liquidity and price crashes
-                           - Failed tokenomics and contract bugs
-                           - Poor documentation and broken features
-                        3. Development: Focus on coding incompetence
-                           - Programming jokes and technical puns
-                           - Development failure humor
-                           - Project disaster mockery
+                        Mix these brutal roasting styles:
+                        1. Technical Roasts:
+                           - Mock their incompetent coding and development disasters
+                           - Roast their broken smart contracts and failed deployments
+                           - Make fun of their copy-pasted code and amateur mistakes
+                           - Blast their failed code reviews and buggy commits
+                        2. Price/Project Roasts:
+                           - Mock their constant price dumps and zero liquidity
+                           - Roast their failed tokenomics and contract bugs
+                           - Make fun of their nonexistent documentation
+                           - Blast their broken features and failed launches
+                        3. Developer Roasts:
+                           - Savage programming jokes about their incompetence
+                           - Brutal technical puns about their failures
+                           - Vulgar mockery of their development disasters
 
-                        Keep roasts under 100 characters. Include emojis (💩,🤡,💻,⚰️,📉,🔥).
-                        Make each roast unique and brutal, emphasizing technical failures."""
+                        Guidelines:
+                        - Keep roasts under 100 characters
+                        - Include emojis (💩,🤡,💻,⚰️,📉,🔥,🖕,🤮)
+                        - Be extremely vulgar and brutal
+                        - Focus on complete technical and project failures
+                        - Make each roast unique and devastating"""
                     },
                     {
                         "role": "user",
-                        "content": "Generate a savage NWA roast about LUX's technical disasters and project failures!"
+                        "content": "Generate the most savage, vulgar NWA roast about LUX's technical disasters!"
                     }
                 ],
                 max_tokens=50,
