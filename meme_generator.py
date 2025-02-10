@@ -4,6 +4,8 @@ from datetime import datetime
 import logging
 from price_chart import create_price_chart, format_price_label
 from PIL import Image, ImageDraw, ImageFont
+import asyncio
+from roast_generator import generate_roast
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -34,6 +36,10 @@ async def generate_meme(timeframe="1hr"):
         logger.info(f"Price data: start=${start_price:.6f}, current=${current_price:.6f}")
         logger.info(f"Calculated stats: Total crash={crash_percent:.1f}%, Timeframe change={timeframe_change:.1f}%, Price={price_str}")
 
+        # Generate a fresh roast for this meme
+        roast = await generate_roast()
+        logger.info(f"Generated roast for meme: {roast}")
+
         # Add text overlay
         img = Image.open(chart_path)
         draw = ImageDraw.Draw(img)
@@ -44,30 +50,6 @@ async def generate_meme(timeframe="1hr"):
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             font = ImageFont.load_default()
 
-        # Generate roast based on crash percentage and timeframe
-        timeframe_display = {
-            "24hr": "24 HOURS",
-            "7d": "7 DAYS",
-            "1m": "1 MONTH",
-            "3m": "3 MONTHS",
-            "1hr": "1 HOUR",
-            "5m": "5 MINUTES",
-            "15m": "15 MINUTES"
-        }
-
-        display_time = timeframe_display.get(timeframe, timeframe.upper())
-
-        if crash_percent >= 90:
-            roast = f"DOWN {crash_percent:.1f}%! COMPLETE RUGPULL! ({price_str})"
-        elif crash_percent >= 70:
-            roast = f"DUMPED {crash_percent:.1f}%! {display_time} OF PAIN! ({price_str})"
-        elif crash_percent >= 50:
-            roast = f"CRASHING {crash_percent:.1f}%! NWA WINS AGAIN! ({price_str})"
-        else:
-            roast = f"DUMPING {crash_percent:.1f}%! {display_time} OF MISERY! ({price_str})"
-
-        logger.info(f"Generated roast text: {roast}")
-
         # Create title based on timeframe
         title = f"$LUX {timeframe} Chart"
 
@@ -76,9 +58,17 @@ async def generate_meme(timeframe="1hr"):
         outline_color = 'black'
         outline_width = 2
 
+        # Center the title and roast text
+        title_width = draw.textlength(title, font=font)
+        roast_width = draw.textlength(roast, font=font)
+
+        # Calculate centered positions
+        title_x = (img.width - title_width) / 2
+        roast_x = (img.width - roast_width) / 2
+
         # Position for title and roast
-        title_pos = (20, 10)
-        roast_pos = (20, 50)  # Moved down to make room for title
+        title_pos = (title_x, 10)
+        roast_pos = (roast_x, 50)
 
         # Draw outline and text for title
         for dx in range(-outline_width, outline_width+1):
