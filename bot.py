@@ -192,17 +192,23 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
         else:
             # Validate contract address format (simple check)
             if not (len(token) == 43 or len(token) == 44):  # Solana addresses are typically 43/44 chars
-                await ctx.send("❌ Invalid Solana contract address! Please provide a valid contract address.")
+                await ctx.send("❌ Invalid Solana contract address! Please provide a valid Solana contract address.")
                 return
+
+            # Show searching message
+            message = await ctx.send(f"🔍 Searching for token info for contract: {token}...")
 
             # Get token info using contract address
             token_info = await get_solana_token_by_contract(token)
             if not token_info:
-                await ctx.send(f"❌ No token found for contract address: {token}")
+                await message.edit(content=f"❌ No token found for contract address: {token}")
                 return
 
             token_id, token_name, token_symbol = token_info
             entry_price = None  # No entry price for other tokens
+
+            # Update message with found token info
+            await message.edit(content=f"📊 Generating chart for {token_name} ({token_symbol})...")
 
         # Validate timeframe
         valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
@@ -210,9 +216,6 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             logger.warning(f"Invalid timeframe requested: {timeframe}")
             await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
             return
-
-        # Send initial message
-        message = await ctx.send(f"📊 Generating chart for {token_name} ({token_symbol}) ({timeframe})...")
 
         # Generate meme
         logger.info("Starting meme generation process")
@@ -229,11 +232,13 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
                 logger.info("Sending meme file to Discord")
                 with open(meme_path, 'rb') as f:
                     await ctx.send(file=discord.File(f))
-                await message.delete()
+                if 'message' in locals():
+                    await message.delete()
                 logger.info("Successfully sent meme and cleaned up message")
             except Exception as e:
                 logger.error(f"Error sending meme file: {str(e)}")
-                await message.edit(content="Failed to send meme! Error occurred while sending file.")
+                if 'message' in locals():
+                    await message.edit(content="Failed to send meme! Error occurred while sending file.")
                 return
 
             # Clean up the file
@@ -245,7 +250,10 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            await message.edit(content=f"Failed to generate chart! Token data not found! 📉")
+            if 'message' in locals():
+                await message.edit(content=f"Failed to generate chart! Token data not found! 📉")
+            else:
+                await ctx.send(f"Failed to generate chart! Token data not found! 📉")
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")

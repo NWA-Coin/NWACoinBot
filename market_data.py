@@ -11,49 +11,75 @@ logger = logging.getLogger('discord_bot')
 # Constants for CoinGecko API
 COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY')
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
+MAX_RETRIES = 3
+RETRY_DELAY = 5
 
-# Default token info moved to variables
+# Constants for default token info
 DEFAULT_TOKEN_ID = "lux-token"  # CoinGecko asset ID for LUX token
 DEFAULT_ENTRY_PRICE = 0.015  # NWA entry price for LUX
 
 # Rate limiting configuration
 MIN_API_INTERVAL = 30  # Minimum seconds between API calls
-MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
 
 async def get_solana_token_by_contract(contract_address: str) -> Optional[tuple[str, str, str]]:
     """Get CoinGecko token ID, name and symbol using Solana contract address."""
     try:
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            headers = {}
-            if COINGECKO_API_KEY:
-                headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
 
-            # Query CoinGecko's coin list endpoint
-            endpoint = f"{COINGECKO_BASE_URL}/coins/list"
-            params = {"include_platform": "true"}
+        for retry in range(MAX_RETRIES):
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    headers = {}
+                    if COINGECKO_API_KEY:
+                        headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
 
-            logger.info(f"Searching for Solana token with contract: {contract_address}")
+                    # Query CoinGecko's coin list endpoint
+                    endpoint = f"{COINGECKO_BASE_URL}/coins/list"
+                    params = {"include_platform": "true"}
 
-            async with session.get(endpoint, params=params, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    # Find token with matching Solana contract address
-                    for token in data:
-                        platforms = token.get("platforms", {})
-                        if "solana" in platforms and platforms["solana"].lower() == contract_address.lower():
-                            logger.info(f"Found Solana token: {token['id']}, name: {token.get('name')}, symbol: {token.get('symbol', '').upper()}")
-                            return token["id"], token.get("name"), token.get("symbol", "").upper()
+                    logger.info(f"Searching for Solana token with contract: {contract_address} (Attempt {retry + 1}/{MAX_RETRIES})")
 
-                    logger.warning(f"No token found for Solana contract: {contract_address}")
-                    return None
+                    async with session.get(endpoint, params=params, headers=headers) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            # Find token with matching Solana contract address
+                            for token in data:
+                                platforms = token.get("platforms", {})
+                                if "solana" in platforms and platforms["solana"].lower() == contract_address.lower():
+                                    token_id = token["id"]
+                                    name = token.get("name", "Unknown Token")
+                                    symbol = token.get("symbol", "???").upper()
+                                    logger.info(f"Found Solana token: {token_id}, name: {name}, symbol: {symbol}")
+                                    return token_id, name, symbol
 
-                logger.error(f"Token search failed with status: {response.status}")
-                return None
+                            logger.warning(f"No token found for Solana contract: {contract_address}")
+                            return None
+
+                        elif response.status == 429:  # Rate limit
+                            logger.warning("Rate limit hit, waiting before retry")
+                            await asyncio.sleep(RETRY_DELAY * (retry + 1))
+                            continue
+                        else:
+                            logger.error(f"Token search failed with status: {response.status}")
+                            if retry < MAX_RETRIES - 1:
+                                await asyncio.sleep(RETRY_DELAY)
+                            continue
+
+            except asyncio.TimeoutError:
+                logger.error(f"Request timeout on attempt {retry + 1}")
+                if retry < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_DELAY)
+            except Exception as e:
+                logger.error(f"Error during API request (attempt {retry + 1}): {str(e)}")
+                if retry < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_DELAY)
+
+        logger.error("All attempts to fetch token info failed")
+        return None
 
     except Exception as e:
         logger.error(f"Error searching for token: {str(e)}")
+        logger.exception("Full traceback:")
         return None
 
 async def fetch_market_data(token_id=DEFAULT_TOKEN_ID, timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[Dict]]:

@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.libsodium
     pkgs.geckodriver
     pkgs.chromedriver
     pkgs.chromium
