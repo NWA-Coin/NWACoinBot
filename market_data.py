@@ -23,10 +23,8 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
     try:
         # Map timeframes to days for API request
         timeframe_map = {
-            "5m": "2",     # 2 days of data
-            "15m": "2",    # 2 days of data
-            "1hr": "3",    # 3 days of data
-            "24hr": "2",   # 2 days of data
+            "1hr": "1",     # 1 day of data (we'll filter to last hour)
+            "24hr": "2",    # 2 days of data
             "7d": "7",     # 7 days of data
             "1m": "30",    # 30 days of data
             "3m": "90"     # 90 days of data
@@ -76,11 +74,8 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                                 continue
 
                             # Filter data points based on timeframe
-                            if timeframe == "5m":
-                                cutoff_time = int((datetime.now() - timedelta(hours=12)).timestamp() * 1000)
-                                price_data = [p for p in price_data if p[0] >= cutoff_time]
-                            elif timeframe == "15m":
-                                cutoff_time = int((datetime.now() - timedelta(hours=24)).timestamp() * 1000)
+                            if timeframe == "1hr":
+                                cutoff_time = int((datetime.now() - timedelta(hours=1)).timestamp() * 1000)
                                 price_data = [p for p in price_data if p[0] >= cutoff_time]
 
                             logger.info(f"After filtering: {len(price_data)} price points")
