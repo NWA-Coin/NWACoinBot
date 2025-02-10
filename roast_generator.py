@@ -21,6 +21,9 @@ FALLBACK_ROASTS = [
     "Error 404: Coding skills not found, just like your liquidity! 📉💀",
     "Copy-pasting code won't save your worthless token! Another L! 🗑️🤡",
     "Even a brain-dead monkey codes better! Complete failure! 🐒💩",
+    "Your GitHub is full of stolen garbage! Certified fraud! 💩🖕",
+    "Imagine failing basic syntax you absolute moron! Get exposed! 🤡💻",
+    "Senior dev? More like senior dumbass! Pure trash! 🗑️👨‍💻",
 
     # Project/Price Roasts
     "LUX chart looking like your life - straight to the dumpster! 📉🗑️",
@@ -30,6 +33,9 @@ FALLBACK_ROASTS = [
     "Another day, another LUX dump! NWA stays winning you clown! 🤡💩",
     "Zero liquidity just like your brain cells! Complete disaster! 💸📉",
     "Imagine launching a token that only goes down! Certified moron! 😂🗑️",
+    "Your token's more dead than your dev career! Get rekt! ⚰️💩",
+    "Chart's dropping faster than your IQ! Complete failure! 📉🤡",
+    "Even LUNA had better tokenomics! Absolute disaster! 💩💸",
 
     # Mixed Content
     "Failed code + zero liquidity = complete dumpster fire! 💩📉",
@@ -38,7 +44,10 @@ FALLBACK_ROASTS = [
     "Can't debug your way out of being trash! Complete failure! 💻🗑️",
     "Pushed to main and the price crashed again! Certified clown! 🤡💩",
     "From junior dev to complete laughingstock! Stay losing trash! 🖕👨‍💻",
-    "Commit history: 100% stolen garbage! Pure trash! 💩🤮"
+    "Commit history: 100% stolen garbage! Pure trash! 💩🤮",
+    "Your code's more useless than SAFEMOON! Complete joke! 🤡💩",
+    "Even BITCONNECT had better devs! Absolute failure! 💩📉",
+    "Bootcamp dropout writing rugpull code! Get exposed! 🗑️👨‍💻"
 ]
 
 async def get_crash_stats():

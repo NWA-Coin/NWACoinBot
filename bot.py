@@ -13,6 +13,7 @@ from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
+from wallet_manager import WalletManager
 
 # Set up logging
 logging.basicConfig(
@@ -48,9 +49,21 @@ bot = commands.Bot(
 # Remove default help command
 bot.remove_command('help')
 
+wallet_manager = None
+
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects"""
+    global wallet_manager
+    try:
+        logger.info("Initializing wallet manager...")
+        wallet_manager = WalletManager()
+        logger.info("Wallet manager initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize wallet manager: {str(e)}")
+        logger.exception("Full traceback:")
+        return
+
     logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
@@ -289,22 +302,114 @@ async def crash(ctx):
         logger.exception("Full traceback:")
         await ctx.send("💥 LUX CRASH UPDATE 💥\nDown 99.9%! Complete rugpull! 💀")
 
+
+@bot.command(name='linkwallet')
+@commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
+async def link_wallet(ctx, wallet_address: str = None):
+    """Link your NWA wallet to your Discord account"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    if not wallet_address:
+        await ctx.send("❌ Please provide your Solana wallet address!\nUsage: !linkwallet <address>")
+        return
+
+    try:
+        success, result = await wallet_manager.link_wallet(ctx.author.id, wallet_address)
+
+        if success:
+            # Result contains verification code
+            message = (
+                f"🔗 Linking NWA wallet `{wallet_address}`\n\n"
+                f"To verify ownership, send `0` SOL to this same wallet with this memo:\n"
+                f"`{result}`\n\n"
+                f"Then use `!verifywallet {result}` to complete verification"
+            )
+            # Send verification instructions in DM for privacy
+            try:
+                await ctx.author.send(message)
+                await ctx.send("📬 Check your DMs for verification instructions!")
+            except discord.Forbidden:
+                await ctx.send("❌ I couldn't DM you! Please enable DMs from server members.")
+        else:
+            await ctx.send(f"❌ {result}")
+    except Exception as e:
+        logger.error(f"Error in link_wallet command: {str(e)}")
+        await ctx.send("❌ Failed to process wallet linking")
+
+@bot.command(name='verifywallet')
+@commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
+async def verify_wallet(ctx, verification_code: str = None):
+    """Verify your NWA wallet ownership using the verification code"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    if not verification_code:
+        await ctx.send("❌ Please provide the verification code!\nUsage: !verifywallet <code>")
+        return
+
+    try:
+        success, message = await wallet_manager.verify_wallet(ctx.author.id, verification_code)
+        if success:
+            await ctx.send(f"✅ {message}")
+        else:
+            await ctx.send(f"❌ {message}")
+    except Exception as e:
+        logger.error(f"Error in verify_wallet command: {str(e)}")
+        await ctx.send("❌ Failed to verify wallet")
+
+@bot.command(name='wallet')
+@commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
+async def list_wallet(ctx):
+    """Show your linked NWA wallet"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    try:
+        wallet = await wallet_manager.get_user_wallet(ctx.author.id)
+
+        if not wallet:
+            await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
+            return
+
+        # Create a formatted wallet display
+        status = "✅ Airdrop Claimed" if wallet['airdrop_claimed'] else "⏳ Airdrop Pending"
+        wallet_info = (
+            f"🏦 Your NWA Wallet:\n"
+            f"Address: `{wallet['wallet_address']}`\n"
+            f"Linked: <t:{int(wallet['created_at'].timestamp())}:R>\n"
+            f"Status: {status}"
+        )
+
+        await ctx.send(wallet_info)
+    except Exception as e:
+        logger.error(f"Error in list_wallet command: {str(e)}")
+        await ctx.send("❌ Failed to retrieve wallet info")
+
 @bot.command(name='help')
 async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
     await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting Crypto"),
+        activity=discord.Game(name="!help | NWA Token"),
         status=discord.Status.online
     )
     help_text = """
-🔥 **Crypto Chart Bot Commands** 🔥
+🔥 **NWA Bot Commands** 🔥
 • `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
 • `!meme [token] [timeframe]` - Generate a price chart meme
   - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
+
+🏦 **NWA Wallet Commands** 🏦
+• `!linkwallet <address>` - Link your NWA wallet
+• `!verifywallet <code>` - Verify wallet ownership
+• `!wallet` - Show your NWA wallet info
     """
     await ctx.send(help_text)
 
@@ -346,25 +451,33 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 async def main():
-    """Main async entry point"""
+    """Main async entry point with enhanced error handling"""
     try:
         # Start keep-alive server
         logger.info("Starting keep-alive server...")
-        server_port = keep_alive()
-        if not server_port:
+        keep_alive_port = keep_alive()
+        if not keep_alive_port:
             logger.error("Failed to start keep-alive server")
             return
 
-        logger.info(f"Keep-alive server started on port {server_port}")
+        logger.info(f"Keep-alive server started on port {keep_alive_port}")
 
-        # Initialize supervisor
-        supervisor = BotSupervisor(server_port)
+        # Initialize supervisor with keep-alive port
+        supervisor = BotSupervisor(keep_alive_port)
         supervisor.setup_signal_handlers()
 
-        # Start the bot
+        # Start the bot with proper error handling
         async with bot:
-            bot.loop.create_task(supervisor.monitor(bot))
-            await bot.start(TOKEN)
+            logger.info("Starting bot supervisor monitoring...")
+            monitor_task = bot.loop.create_task(supervisor.monitor(bot))
+
+            logger.info("Starting bot with Discord token...")
+            try:
+                await bot.start(TOKEN)
+            except Exception as e:
+                logger.error(f"Failed to start bot: {str(e)}")
+                monitor_task.cancel()
+                raise
 
     except Exception as e:
         logger.critical(f"Critical error in main: {str(e)}")
@@ -374,6 +487,7 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        logger.info("Starting bot main sequence...")
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt")

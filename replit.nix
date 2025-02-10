@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.postgresql
     pkgs.libsodium
     pkgs.geckodriver
     pkgs.chromedriver
