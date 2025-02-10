@@ -29,13 +29,13 @@ def run():
         app.config['ENV'] = 'production'
         app.config['DEBUG'] = False
 
-        # Start server with threading enabled
+        # Start server with improved production settings
         app.run(
-            host='0.0.0.0',  # Required for external access
+            host='0.0.0.0',
             port=port,
             debug=False,
-            use_reloader=False,  # Disable reloader in production
-            threaded=True  # Enable threading
+            use_reloader=False,
+            threaded=True
         )
         return True
     except Exception as e:
@@ -46,14 +46,21 @@ def run():
 def keep_alive():
     """Start the keep-alive server in a daemon thread"""
     try:
-        # Create and start server thread
-        server = Thread(target=run, daemon=True)
+        # Create and configure server thread
+        server = Thread(target=run, daemon=True, name="KeepAliveServer")
         server.start()
 
-        # Give the server a moment to start
+        # Give the server time to start
         time.sleep(2)
-        logger.info("Keep-alive server started successfully")
-        return True
+
+        # Verify server started successfully
+        if server.is_alive():
+            logger.info("Keep-alive server started successfully")
+            return True
+        else:
+            logger.error("Keep-alive server failed to start")
+            return False
+
     except Exception as e:
         logger.error(f"Failed to start keep-alive server: {str(e)}")
         logger.exception("Full traceback:")
@@ -61,7 +68,6 @@ def keep_alive():
 
 if __name__ == "__main__":
     if keep_alive():
-        # Keep main thread alive
         try:
             while True:
                 time.sleep(1)
