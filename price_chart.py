@@ -105,9 +105,9 @@ async def create_price_chart(timeframe="1hr"):
         price_range = max_price - min_price
 
         try:
-            # Load fonts with smaller size for time labels
+            # Load fonts with consistent size for all labels
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
-            price_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            price_font = time_font  # Use same font for price labels
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             time_font = price_font = ImageFont.load_default()
