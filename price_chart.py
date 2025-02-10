@@ -34,23 +34,10 @@ def format_price_label(price):
     return f"{cents:.2f}¢"  # Keeping the 2 decimal points
 
 def format_time_label(timestamp, timeframe="1hr"):
-    """Format time label with standardized intervals and dates."""
+    """Format time label with standardized intervals."""
     try:
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
-
-        # Round to nearest interval based on timeframe
-        minutes = eastern_time.minute
-        if timeframe == "5m":
-            rounded_minutes = round(minutes / 5) * 5
-        elif timeframe == "15m":
-            rounded_minutes = round(minutes / 15) * 15
-        else:  # 1hr
-            rounded_minutes = 0
-
-        eastern_time = eastern_time.replace(minute=rounded_minutes, second=0, microsecond=0)
-
-        # Format with compact date and clean time
         return eastern_time.strftime("%-m/%-d\n%-I:%M%p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
@@ -117,23 +104,25 @@ async def create_price_chart(timeframe="1hr"):
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
 
-        # Determine number of time labels based on timeframe
-        if timeframe == "5m":
-            num_labels = 24  # Every 15 minutes
-        elif timeframe == "15m":
-            num_labels = 16  # Every 30 minutes
-        else:  # 1hr
-            num_labels = 12  # Every hour
+        # Fixed number of labels based on timeframe
+        time_steps = {
+            "5m": 6,    # Every hour
+            "15m": 8,   # Every 3 hours
+            "1hr": 12   # Every 6 hours
+        }
+        num_labels = time_steps.get(timeframe, 12)
 
         # Draw time labels and vertical grid lines
-        time_interval = (timestamps[-1] - timestamps[0]) / (num_labels - 1)
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
-            timestamp = timestamps[0] + (i * time_interval)
+            # Calculate timestamp for this position
+            index = int((i / (num_labels - 1)) * (len(timestamps) - 1))
+            timestamp = timestamps[index]
+
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
             time_str = format_time_label(timestamp, timeframe)
             # Center the time label under the grid line
-            time_width, _ = draw.textsize(time_str, font=time_font)
+            time_width = draw.textlength(time_str, font=time_font)
             draw.text((x - time_width/2, height - bottom_padding + 20), time_str, fill=label_color, font=time_font)
 
         # Draw price line
