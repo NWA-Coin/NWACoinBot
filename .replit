@@ -70,7 +70,7 @@ task = "packager.installForAll"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python bot.py"
-waitForPort = 8090
+waitForPort = 8080
 
 [deployment]
 run = ["sh", "-c", "python python_repl.py"]

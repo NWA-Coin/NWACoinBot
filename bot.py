@@ -361,7 +361,6 @@ async def main():
     try:
         logger.info("Starting bot initialization sequence...")
 
-
         # First, try to start the keep-alive server
         logger.info("Attempting to start keep-alive server...")
         server_started = keep_alive()
@@ -369,7 +368,7 @@ async def main():
 
         while not server_started and retries > 0:
             logger.warning(f"Keep-alive server failed to start, retrying... ({retries} attempts left)")
-            await asyncio.sleep(5)  # Wait before retry
+            await asyncio.sleep(2)  # Reduced wait time between retries
             server_started = keep_alive()
             retries -= 1
 
