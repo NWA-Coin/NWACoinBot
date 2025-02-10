@@ -4,12 +4,55 @@ from datetime import datetime
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 from market_data import fetch_lux_market_data
+import math
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
 
 # Define Eastern timezone
 eastern = pytz.timezone('US/Eastern')
+
+def round_to_nice_number(value):
+    """Round to a nice number for display."""
+    magnitude = math.floor(math.log10(value))
+    power_of_ten = 10 ** magnitude
+    normalized = value / power_of_ten
+
+    nice_numbers = [1, 2, 5, 10]
+    nice_normalized = min(nice_numbers, key=lambda x: abs(x - normalized))
+
+    return nice_normalized * power_of_ten
+
+def format_price_label(price):
+    """Format price label dynamically based on value."""
+    if price < 0.01:  # Less than 1 cent
+        return f"{price * 10000:.2f}¢/10000"
+    elif price < 0.1:  # Less than 10 cents
+        return f"{price * 1000:.2f}¢/1000"
+    elif price < 1:  # Less than a dollar
+        return f"{price * 100:.2f}¢"
+    else:
+        return f"${price:.2f}"
+
+def format_time_label(timestamp, timeframe):
+    """Format time label based on timeframe."""
+    try:
+        dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
+        eastern_time = dt.astimezone(eastern)
+
+        if timeframe in ["5m", "15m", "1hr"]:
+            return eastern_time.strftime("%-I:%M %p")
+        elif timeframe == "24hr":
+            return eastern_time.strftime("%-I%p")
+        elif timeframe == "7d":
+            return eastern_time.strftime("%a")
+        elif timeframe in ["1m", "3m"]:
+            return eastern_time.strftime("%b %-d")
+
+        return eastern_time.strftime("%-I:%M %p")
+    except Exception as e:
+        logger.error(f"Error formatting time label: {str(e)}")
+        return "N/A"
 
 async def get_lux_price_history(timeframe="1hr"):
     """Get LUX price history with specified timeframe."""
@@ -27,21 +70,6 @@ async def get_lux_price_history(timeframe="1hr"):
     except Exception as e:
         logger.error(f"Error in price history retrieval: {str(e)}")
         return None, None
-
-def format_price_label(price):
-    """Format price in cents."""
-    cents = price * 100
-    return f"{cents:.2f}¢"
-
-def format_time_label(timestamp):
-    """Format time label."""
-    try:
-        dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
-        eastern_time = dt.astimezone(eastern)
-        return eastern_time.strftime("%-I:%M %p")
-    except Exception as e:
-        logger.error(f"Error formatting time label: {str(e)}")
-        return "N/A"
 
 async def create_price_chart(timeframe="1hr"):
     """Create a simple line chart showing price movement."""
@@ -65,7 +93,7 @@ async def create_price_chart(timeframe="1hr"):
         bottom_padding = 100
 
         # Create image with dark theme
-        img = Image.new('RGB', (width, height), '#0A2A12')  # Changed to dark green
+        img = Image.new('RGB', (width, height), '#0A2A12')  # Dark green background
         draw = ImageDraw.Draw(img)
 
         # Calculate chart dimensions
@@ -73,8 +101,13 @@ async def create_price_chart(timeframe="1hr"):
         chart_height = height - (top_padding + bottom_padding)
 
         # Calculate price range with padding
-        max_price = max(prices) * 1.02  # Add 2% padding
-        min_price = min(prices) * 0.98  # Add 2% padding
+        max_price = max(prices) * 1.05  # Add 5% padding
+        min_price = min(prices) * 0.95  # Add 5% padding
+        price_range = max_price - min_price
+
+        # Round price range to nice numbers
+        max_price = round_to_nice_number(max_price)
+        min_price = round_to_nice_number(min_price)
         price_range = max_price - min_price
 
         try:
@@ -90,26 +123,44 @@ async def create_price_chart(timeframe="1hr"):
         label_color = '#FFFFFF'
         line_color = '#FF3333'
 
+        # Calculate nice intervals for price labels
+        num_price_lines = 6
+        price_interval = price_range / (num_price_lines - 1)
+        price_interval = round_to_nice_number(price_interval)
+
         # Draw horizontal grid lines and price labels
-        for i in range(6):
-            price = min_price + (i * (price_range / 5))
+        for i in range(num_price_lines):
+            price = min_price + (i * price_interval)
             y = top_padding + ((max_price - price) * chart_height / price_range)
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
 
+        # Calculate nice intervals for time labels
+        if timeframe in ["5m", "15m"]:
+            num_labels = 6
+        elif timeframe == "1hr":
+            num_labels = 7
+        elif timeframe == "24hr":
+            num_labels = 8
+        elif timeframe == "7d":
+            num_labels = 7  # One for each day
+        else:
+            num_labels = 8
+
         # Draw time labels and vertical grid lines
-        num_labels = 8  # Fixed number of labels
         for i in range(num_labels):
             x = padding + (i * chart_width / (num_labels - 1))
             index = int((i / (num_labels - 1)) * (len(timestamps) - 1))
             timestamp = timestamps[index]
 
             draw.line([(x, top_padding), (x, height - bottom_padding)], fill=grid_color)
-            time_str = format_time_label(timestamp)
+            time_str = format_time_label(timestamp, timeframe)
+
             # Center the time label under the grid line
             time_width = draw.textlength(time_str, font=time_font)
-            draw.text((x - time_width/2, height - bottom_padding + 20), time_str, fill=label_color, font=time_font)
+            draw.text((x - time_width/2, height - bottom_padding + 20), 
+                     time_str, fill=label_color, font=time_font)
 
         # Draw price line
         points = []
