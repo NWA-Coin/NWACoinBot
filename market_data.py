@@ -25,7 +25,11 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
         timeframe_map = {
             "5m": "2",     # 2 days of data
             "15m": "2",    # 2 days of data
-            "1hr": "3"     # 3 days of data
+            "1hr": "3",    # 3 days of data
+            "24hr": "2",   # 2 days of data
+            "7d": "7",     # 7 days of data
+            "1m": "30",    # 30 days of data
+            "3m": "90"     # 90 days of data
         }
 
         days = timeframe_map.get(timeframe, "3")

@@ -181,10 +181,10 @@ async def meme(ctx, timeframe: str = "1hr"):
         )
 
         # Validate timeframe
-        valid_timeframes = {"5m", "15m", "1hr"}
+        valid_timeframes = {"5m", "15m", "1hr", "24hr", "7d", "1m", "3m"}
         if timeframe not in valid_timeframes:
             logger.warning(f"Invalid timeframe requested: {timeframe}")
-            await ctx.send("❌ Invalid timeframe! Use 5m, 15m, or 1hr")
+            await ctx.send("❌ Invalid timeframe! Use 5m, 15m, 1hr, 24hr, 7d, 1m, or 3m")
             return
 
         # Send initial message
@@ -275,7 +275,7 @@ async def help_command(ctx):
 • `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
 • `!meme [timeframe]` - Generate a price chart meme
-  - Timeframes: 5m, 15m, 1hr
+  - Timeframes: 5m, 15m, 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
     """
     await ctx.send(help_text)

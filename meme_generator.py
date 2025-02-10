@@ -44,15 +44,27 @@ async def generate_meme(timeframe="1hr"):
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             font = ImageFont.load_default()
 
-        # Generate roast based on crash percentage
+        # Generate roast based on crash percentage and timeframe
+        timeframe_display = {
+            "24hr": "24 HOURS",
+            "7d": "7 DAYS",
+            "1m": "1 MONTH",
+            "3m": "3 MONTHS",
+            "1hr": "1 HOUR",
+            "5m": "5 MINUTES",
+            "15m": "15 MINUTES"
+        }
+
+        display_time = timeframe_display.get(timeframe, timeframe.upper())
+
         if crash_percent >= 90:
             roast = f"DOWN {crash_percent:.1f}%! COMPLETE RUGPULL! ({price_str})"
         elif crash_percent >= 70:
-            roast = f"DUMPED {crash_percent:.1f}%! SINCE NWA TAKEOVER! ({price_str})"
+            roast = f"DUMPED {crash_percent:.1f}%! {display_time} OF PAIN! ({price_str})"
         elif crash_percent >= 50:
             roast = f"CRASHING {crash_percent:.1f}%! NWA WINS AGAIN! ({price_str})"
         else:
-            roast = f"DUMPING {crash_percent:.1f}%! SINCE NWA TAKEOVER! ({price_str})"
+            roast = f"DUMPING {crash_percent:.1f}%! {display_time} OF MISERY! ({price_str})"
 
         logger.info(f"Generated roast text: {roast}")
 
