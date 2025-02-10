@@ -171,7 +171,7 @@ async def roast(ctx):
 
 @bot.command(name='meme')
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
-async def meme(ctx, timeframe: str = "1hr"):
+async def meme(ctx, timeframe: str = "7d"):
     """Generate price chart meme with specified timeframe"""
     logger.info(f'Starting meme command execution for {ctx.author} with timeframe {timeframe}')
     try:
