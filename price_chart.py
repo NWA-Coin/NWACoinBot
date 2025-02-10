@@ -24,15 +24,9 @@ def round_to_nice_number(value):
     return nice_normalized * power_of_ten
 
 def format_price_label(price):
-    """Format price label dynamically based on value."""
-    if price < 0.01:  # Less than 1 cent
-        return f"{price * 10000:.2f}¢/10000"
-    elif price < 0.1:  # Less than 10 cents
-        return f"{price * 1000:.2f}¢/1000"
-    elif price < 1:  # Less than a dollar
-        return f"{price * 100:.2f}¢"
-    else:
-        return f"${price:.2f}"
+    """Format price in cents."""
+    cents = price * 100
+    return f"{cents:.2f}¢"
 
 def format_time_label(timestamp, timeframe):
     """Format time label based on timeframe."""
@@ -40,16 +34,17 @@ def format_time_label(timestamp, timeframe):
         dt = datetime.fromtimestamp(timestamp / 1000, pytz.UTC)
         eastern_time = dt.astimezone(eastern)
 
+        # Include both date and time for all timeframes
         if timeframe in ["5m", "15m", "1hr"]:
-            return eastern_time.strftime("%-I:%M %p")
+            return eastern_time.strftime("%m/%d %-I:%M %p")
         elif timeframe == "24hr":
-            return eastern_time.strftime("%-I%p")
+            return eastern_time.strftime("%m/%d %-I%p")
         elif timeframe == "7d":
-            return eastern_time.strftime("%a")
+            return eastern_time.strftime("%m/%d %a")
         elif timeframe in ["1m", "3m"]:
-            return eastern_time.strftime("%b %-d")
+            return eastern_time.strftime("%m/%d")
 
-        return eastern_time.strftime("%-I:%M %p")
+        return eastern_time.strftime("%m/%d %-I:%M %p")
     except Exception as e:
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A"
@@ -105,11 +100,6 @@ async def create_price_chart(timeframe="1hr"):
         min_price = min(prices) * 0.95  # Add 5% padding
         price_range = max_price - min_price
 
-        # Round price range to nice numbers
-        max_price = round_to_nice_number(max_price)
-        min_price = round_to_nice_number(min_price)
-        price_range = max_price - min_price
-
         try:
             # Load fonts
             time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
@@ -123,14 +113,9 @@ async def create_price_chart(timeframe="1hr"):
         label_color = '#FFFFFF'
         line_color = '#FF3333'
 
-        # Calculate nice intervals for price labels
-        num_price_lines = 6
-        price_interval = price_range / (num_price_lines - 1)
-        price_interval = round_to_nice_number(price_interval)
-
         # Draw horizontal grid lines and price labels
-        for i in range(num_price_lines):
-            price = min_price + (i * price_interval)
+        for i in range(6):
+            price = min_price + (i * (price_range / 5))
             y = top_padding + ((max_price - price) * chart_height / price_range)
             draw.line([(padding, y), (width - padding, y)], fill=grid_color, width=1)
             price_str = format_price_label(price)
