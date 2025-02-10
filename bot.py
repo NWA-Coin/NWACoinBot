@@ -186,8 +186,9 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
         # Handle LUX separately as it's our primary token
         if token == "lux":
             token_id = "lux-token"
-            entry_price = 0.015  # NWA entry price
+            token_name = "LUX"
             token_symbol = "LUX"
+            entry_price = 0.015  # NWA entry price
         else:
             # Validate contract address format (simple check)
             if not (len(token) == 43 or len(token) == 44):  # Solana addresses are typically 43/44 chars
@@ -195,13 +196,13 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
                 return
 
             # Get token info using contract address
-            token_id = await get_solana_token_by_contract(token)
-            if not token_id:
+            token_info = await get_solana_token_by_contract(token)
+            if not token_info:
                 await ctx.send(f"❌ No token found for contract address: {token}")
                 return
 
+            token_id, token_name, token_symbol = token_info
             entry_price = None  # No entry price for other tokens
-            token_symbol = token[:8] + "..."  # Truncate contract address for display
 
         # Validate timeframe
         valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
@@ -211,7 +212,7 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             return
 
         # Send initial message
-        message = await ctx.send(f"📊 Generating chart for {token_symbol} ({timeframe})...")
+        message = await ctx.send(f"📊 Generating chart for {token_name} ({token_symbol}) ({timeframe})...")
 
         # Generate meme
         logger.info("Starting meme generation process")

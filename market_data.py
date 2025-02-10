@@ -21,8 +21,8 @@ MIN_API_INTERVAL = 30  # Minimum seconds between API calls
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
-async def get_solana_token_by_contract(contract_address: str) -> Optional[str]:
-    """Get CoinGecko token ID using Solana contract address."""
+async def get_solana_token_by_contract(contract_address: str) -> Optional[tuple[str, str, str]]:
+    """Get CoinGecko token ID, name and symbol using Solana contract address."""
     try:
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -43,8 +43,8 @@ async def get_solana_token_by_contract(contract_address: str) -> Optional[str]:
                     for token in data:
                         platforms = token.get("platforms", {})
                         if "solana" in platforms and platforms["solana"].lower() == contract_address.lower():
-                            logger.info(f"Found Solana token: {token['id']}")
-                            return token["id"]
+                            logger.info(f"Found Solana token: {token['id']}, name: {token.get('name')}, symbol: {token.get('symbol', '').upper()}")
+                            return token["id"], token.get("name"), token.get("symbol", "").upper()
 
                     logger.warning(f"No token found for Solana contract: {contract_address}")
                     return None
