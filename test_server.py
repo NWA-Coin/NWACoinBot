@@ -14,6 +14,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
+    """Simple endpoint to respond to keep-alive pings"""
     return "Test server is alive!"
 
 def verify_server():
@@ -30,19 +31,19 @@ def verify_server():
 if __name__ == "__main__":
     try:
         logger.info("Starting test server on port 3000...")
-        
+
         # Run server in a thread so we can verify it
         from threading import Thread
         server = Thread(target=lambda: app.run(host='0.0.0.0', port=3000, debug=False, use_reloader=False))
         server.daemon = True
         server.start()
-        
+
         # Verify server
         if verify_server():
             logger.info("Server started and verified successfully!")
             server.join()  # Keep server running
         else:
             logger.error("Server verification failed!")
-            
+
     except Exception as e:
         logger.error(f"Server startup failed: {str(e)}")

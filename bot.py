@@ -389,6 +389,33 @@ async def list_wallet(ctx):
         logger.error(f"Error in list_wallet command: {str(e)}")
         await ctx.send("❌ Failed to retrieve wallet info")
 
+@bot.command(name='balance')
+@commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
+async def check_balance(ctx):
+    """Check your NWA token balance"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    try:
+        success, balance, last_update = await wallet_manager.get_token_balance(ctx.author.id)
+
+        if not success:
+            await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
+            return
+
+        # Format balance message
+        balance_msg = (
+            f"💰 Your NWA Balance:\n"
+            f"Amount: `{balance:,.8f} NWA`\n"
+            f"Last Updated: {last_update}"
+        )
+
+        await ctx.send(balance_msg)
+    except Exception as e:
+        logger.error(f"Error in check_balance command: {str(e)}")
+        await ctx.send("❌ Failed to retrieve balance info")
+
 @bot.command(name='help')
 async def help_command(ctx):
     """Show available commands"""
@@ -410,6 +437,7 @@ async def help_command(ctx):
 • `!linkwallet <address>` - Link your NWA wallet
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
+• `!balance` - Check your NWA token balance
     """
     await ctx.send(help_text)
 

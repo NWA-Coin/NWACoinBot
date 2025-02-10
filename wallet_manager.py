@@ -5,7 +5,7 @@ import base58
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import Optional
+from typing import Optional, Tuple
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -21,7 +21,7 @@ class WalletManager:
         try:
             with psycopg2.connect(self.db_url) as conn:
                 with conn.cursor() as cur:
-                    # Create wallet_links table with airdrop tracking
+                    # Create wallet_links table with airdrop and balance tracking
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS wallet_links (
                             id SERIAL PRIMARY KEY,
@@ -30,6 +30,8 @@ class WalletManager:
                             verified BOOLEAN DEFAULT FALSE,
                             verification_code TEXT,
                             airdrop_claimed BOOLEAN DEFAULT FALSE,
+                            token_balance DECIMAL(20, 8) DEFAULT 0.0,
+                            last_balance_update TIMESTAMP,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
@@ -38,6 +40,54 @@ class WalletManager:
         except Exception as e:
             logger.error(f"Database setup error: {str(e)}")
             raise
+
+    async def update_token_balance(self, discord_id: int, new_balance: float) -> bool:
+        """Update the NWA token balance for a user"""
+        try:
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE wallet_links 
+                        SET token_balance = %s, last_balance_update = NOW()
+                        WHERE discord_id = %s AND verified = TRUE
+                        RETURNING wallet_address
+                    """, (new_balance, discord_id))
+
+                    result = cur.fetchone()
+                    conn.commit()
+
+                    if result:
+                        logger.info(f"Updated balance for {result[0]} to {new_balance} NWA")
+                        return True
+                    else:
+                        logger.warning(f"No verified wallet found for discord_id {discord_id}")
+                        return False
+
+        except Exception as e:
+            logger.error(f"Error updating token balance: {str(e)}")
+            return False
+
+    async def get_token_balance(self, discord_id: int) -> Tuple[bool, Optional[float], Optional[str]]:
+        """Get the current NWA token balance for a user"""
+        try:
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT wallet_address, token_balance, last_balance_update 
+                        FROM wallet_links 
+                        WHERE discord_id = %s AND verified = TRUE
+                    """, (discord_id,))
+
+                    result = cur.fetchone()
+                    if result:
+                        last_update = result['last_balance_update']
+                        update_str = f"<t:{int(last_update.timestamp())}:R>" if last_update else "Never"
+                        return True, result['token_balance'], update_str
+                    return False, None, None
+
+        except Exception as e:
+            logger.error(f"Error getting token balance: {str(e)}")
+            return False, None, None
 
     async def link_wallet(self, discord_id: int, wallet_address: str) -> tuple[bool, str]:
         """
@@ -147,7 +197,7 @@ class WalletManager:
             with psycopg2.connect(self.db_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
-                        SELECT wallet_address, created_at, airdrop_claimed
+                        SELECT wallet_address, created_at, airdrop_claimed, token_balance, last_balance_update
                         FROM wallet_links 
                         WHERE discord_id = %s AND verified = TRUE
                     """, (discord_id,))
