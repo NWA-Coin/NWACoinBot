@@ -29,7 +29,7 @@ def verify_server():
     try:
         # First check if port is actually in use
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex(('127.0.0.1', 3000))
+        result = sock.connect_ex(('0.0.0.0', 3000))
         sock.close()
 
         if result != 0:
@@ -37,9 +37,13 @@ def verify_server():
             return False
 
         logger.info("Port 3000 is in use, testing HTTP response...")
-        response = requests.get('http://127.0.0.1:3000')
-        logger.info(f"Server test response: {response.status_code}")
-        return response.status_code == 200
+        try:
+            response = requests.get('http://0.0.0.0:3000/', timeout=5)
+            logger.info(f"Server test response: {response.status_code}")
+            return response.status_code == 200
+        except requests.RequestException as e:
+            logger.error(f"HTTP request failed: {str(e)}")
+            return False
     except Exception as e:
         logger.error(f"Server test failed: {str(e)}")
         return False
@@ -49,8 +53,11 @@ def keep_alive():
     try:
         logger.info("Starting keep-alive server on port 3000...")
 
+        def run_flask():
+            app.run(host='0.0.0.0', port=3000, debug=False, use_reloader=False)
+
         # Start Flask in a daemon thread
-        server = Thread(target=lambda: app.run(host='0.0.0.0', port=3000, debug=False, use_reloader=False))
+        server = Thread(target=run_flask)
         server.daemon = True
         server.start()
 

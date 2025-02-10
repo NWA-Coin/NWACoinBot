@@ -22,7 +22,7 @@ def verify_server():
     """Test if server is responding"""
     time.sleep(2)  # Wait for server to start
     try:
-        response = requests.get('http://127.0.0.1:5000')
+        response = requests.get('http://0.0.0.0:5000')
         logger.info(f"Server test response: {response.status_code}")
         return response.status_code == 200
     except Exception as e:

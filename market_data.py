@@ -14,9 +14,10 @@ COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
-# Constants for default token info
-DEFAULT_TOKEN_ID = "lux-token"  # CoinGecko asset ID for LUX token
-DEFAULT_ENTRY_PRICE = 0.015  # NWA entry price for LUX
+# Constants for token configuration
+TOKEN_CONTRACT = "J9RZefdNW9eTCiVPLtke5rashEUGeVaXLk7iWFTupump"  # NWADEV token contract
+DEFAULT_TOKEN_ID = "nwadev-token"  # CoinGecko asset ID for NWADEV token
+DEFAULT_ENTRY_PRICE = 0.001  # Entry price for NWADEV
 
 # Rate limiting configuration
 MIN_API_INTERVAL = 30  # Minimum seconds between API calls

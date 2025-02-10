@@ -12,7 +12,7 @@ from market_data import get_solana_token_by_contract
 logger = logging.getLogger('discord_bot')
 
 # Constants for token configuration
-TOKEN_CONTRACT = "7VQNk6fmMaNegPWcaAeZkZcFXV7UCcKW9VLu89QUw5as"
+TOKEN_CONTRACT = "J9RZefdNW9eTCiVPLtke5rashEUGeVaXLk7iWFTupump"  # NWADEV token contract
 MIN_HOLDING_AMOUNT = 100000  # Minimum tokens required for airdrop
 AIRDROP_AMOUNT = 10000      # Amount of tokens to airdrop
 
@@ -21,6 +21,8 @@ class WalletManager:
         """Initialize database connection"""
         self.db_url = os.getenv('DATABASE_URL')
         self.setup_database()
+        logger.info(f"WalletManager initialized with TOKEN_CONTRACT: {TOKEN_CONTRACT}")
+        logger.info(f"Airdrop settings - Min holding: {MIN_HOLDING_AMOUNT}, Amount: {AIRDROP_AMOUNT}")
 
     def setup_database(self):
         """Create necessary tables if they don't exist"""
@@ -86,6 +88,7 @@ class WalletManager:
         try:
             with psycopg2.connect(self.db_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    # Updated query to include all necessary fields
                     cur.execute("""
                         SELECT wallet_address, token_balance, airdrop_eligible, airdrop_claimed
                         FROM wallet_links 
@@ -93,13 +96,19 @@ class WalletManager:
                     """, (discord_id,))
 
                     result = cur.fetchone()
+                    logger.info(f"Airdrop eligibility check result: {result}")
+
                     if result:
-                        eligible = result['airdrop_eligible'] and not result['airdrop_claimed']
-                        return True, result['token_balance'], eligible
+                        eligible = result['token_balance'] >= MIN_HOLDING_AMOUNT and not result['airdrop_claimed']
+                        token_balance = float(result['token_balance'])
+                        return True, token_balance, eligible
+
+                    logger.warning(f"No verified wallet found for discord_id {discord_id}")
                     return False, None, None
 
         except Exception as e:
             logger.error(f"Error checking airdrop eligibility: {str(e)}")
+            logger.exception("Full traceback:")
             return False, None, None
 
     async def process_airdrop(self, discord_id: int) -> Tuple[bool, str]:

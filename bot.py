@@ -15,7 +15,7 @@ from market_data import get_solana_token_by_contract
 from supervisor import BotSupervisor
 from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT, AIRDROP_AMOUNT
 
-# Set up logging
+# Update the logging configuration at the top of bot.py
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -64,7 +64,7 @@ async def on_ready():
         logger.exception("Full traceback:")
         return
 
-    logger.info(f'Logged in as {bot.user.name} ($LUXSUX)')
+    logger.info(f'Logged in as {bot.user.name} ($NWADEV)')
     logger.info(f'Bot ID: {bot.user.id}')
     logger.info('Bot is ready!')
 
