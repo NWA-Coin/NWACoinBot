@@ -65,7 +65,7 @@ async def create_price_chart(timeframe="1hr"):
         bottom_padding = 100
 
         # Create image with dark theme
-        img = Image.new('RGB', (width, height), '#1E2124')
+        img = Image.new('RGB', (width, height), '#0A2A12')  # Changed to dark green
         draw = ImageDraw.Draw(img)
 
         # Calculate chart dimensions
@@ -85,8 +85,8 @@ async def create_price_chart(timeframe="1hr"):
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             time_font = price_font = ImageFont.load_default()
 
-        # Draw grid and labels
-        grid_color = '#2F3136'
+        # Draw grid and labels with adjusted colors
+        grid_color = '#0D3517'  # Slightly lighter green for grid
         label_color = '#FFFFFF'
         line_color = '#FF3333'
 
