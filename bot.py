@@ -191,13 +191,9 @@ async def meme(ctx, timeframe: str = "7d"):
         logger.info(f"Sending initial message for timeframe {timeframe}")
         message = await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
 
-        # Generate meme - only pass entry_price for default 7d timeframe
+        # Generate meme
         logger.info("Starting meme generation process")
-        if timeframe == "7d":  # Only show entry point for default timeframe
-            entry_price = 0.015  # 1.5 cents NWA entry
-            meme_path = await generate_meme(timeframe, entry_price)
-        else:
-            meme_path = await generate_meme(timeframe)
+        meme_path = await generate_meme(timeframe)
         logger.info(f"Meme generation completed, path: {meme_path}")
 
         if meme_path and os.path.exists(meme_path):

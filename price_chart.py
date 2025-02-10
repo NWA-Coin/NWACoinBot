@@ -70,7 +70,7 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.error(f"Error in price history retrieval: {str(e)}")
         return None, None
 
-async def create_price_chart(timeframe="1hr", entry_price=0.015):
+async def create_price_chart(timeframe="1hr"):
     """Create a simple line chart showing price movement."""
     try:
         # Get price data
@@ -99,17 +99,21 @@ async def create_price_chart(timeframe="1hr", entry_price=0.015):
         chart_width = width - (2 * padding)
         chart_height = height - (top_padding + bottom_padding)
 
-        # Calculate price range with padding and ensure entry price is visible
-        max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
-        min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
+        # Calculate price range with padding and ensure entry price is visible if 7d timeframe
+        entry_price = 0.015  # NWA entry price - 1.5 cents
+        if timeframe == "7d":
+            max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
+            min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
+        else:
+            max_price = max(prices) * 1.05  # Add 5% padding
+            min_price = min(prices) * 0.95  # Add 5% padding
         price_range = max_price - min_price
 
-        # Load fonts with consistent size for all labels
         try:
-            time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)  # Reduced size
-            price_font = time_font  # Use same font for price labels
-            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)  # Title size
-            crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)  # Crash text size
+            time_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+            price_font = time_font
+            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+            crash_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
         except Exception as e:
             logger.warning(f"Failed to load custom font: {str(e)}. Using default.")
             time_font = price_font = title_font = crash_font = ImageFont.load_default()
@@ -140,8 +144,6 @@ async def create_price_chart(timeframe="1hr", entry_price=0.015):
 
         # Calculate centered positions
         title_x = (img.width - title_width) / 2
-
-        # Adjust vertical positioning
         title_y = 30
 
         # Draw crash percentage text below title
@@ -202,13 +204,14 @@ async def create_price_chart(timeframe="1hr", entry_price=0.015):
             draw.line(points, fill='#FF6666', width=5)  # Background glow
             draw.line(points, fill=line_color, width=3)  # Main line
 
-        # Draw NWA entry point indicator
-        entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
-        dot_radius = 6
-        dot_color = '#4444FF'  # Bright blue
-        draw.ellipse([(padding - dot_radius, entry_y - dot_radius),
-                     (padding + dot_radius, entry_y + dot_radius)],
-                    fill=dot_color, outline='white', width=2)
+        # Draw NWA entry point indicator for 7d timeframe only
+        if timeframe == "7d":
+            entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
+            dot_radius = 6
+            dot_color = '#4444FF'  # Bright blue
+            draw.ellipse([(padding - dot_radius, entry_y - dot_radius),
+                         (padding + dot_radius, entry_y + dot_radius)],
+                        fill=dot_color, outline='white', width=2)
 
         # Save chart
         chart_path = f"price_chart_{int(datetime.now().timestamp())}.png"
