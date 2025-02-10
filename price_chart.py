@@ -68,9 +68,9 @@ async def create_price_chart(timeframe="1hr"):
         # Chart dimensions
         width = 1280
         height = 720
-        padding = 80  # Base padding
-        top_padding = 100  # Extra padding for top text
-        bottom_padding = 100  # Extra padding for bottom text
+        padding = 80
+        top_padding = 100
+        bottom_padding = 100
 
         # Create image with dark theme
         img = Image.new('RGB', (width, height), '#1E2124')
