@@ -16,6 +16,8 @@ from supervisor import BotSupervisor
 from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT
 import fcntl
 import errno
+from giveaway_manager import GiveawayManager
+import random
 
 # Update the logging configuration at the top of bot.py
 logging.basicConfig(
@@ -52,17 +54,22 @@ bot = commands.Bot(
 bot.remove_command('help')
 
 wallet_manager = None
+giveaway_manager = None
 
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects"""
-    global wallet_manager
+    global wallet_manager, giveaway_manager
     try:
         logger.info("Initializing wallet manager...")
         wallet_manager = WalletManager()
         logger.info("Wallet manager initialized successfully")
+
+        logger.info("Initializing giveaway manager...")
+        giveaway_manager = GiveawayManager()
+        logger.info("Giveaway manager initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize wallet manager: {str(e)}")
+        logger.error(f"Failed to initialize managers: {str(e)}")
         logger.exception("Full traceback:")
         return
 
@@ -188,56 +195,73 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
             status=discord.Status.online
         )
 
-        # Validate timeframe first
+        # Validate timeframe and token parameters
         valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
-
-        # Check if the first parameter is actually a timeframe
-        if token.lower() in valid_timeframes:
-            timeframe = token.lower()
-            token = "$lux"  # Default to LUX if first param is timeframe
-        elif timeframe.lower() not in valid_timeframes:
-            logger.warning(f"Invalid timeframe requested: {timeframe}")
-            await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
-            return
-
-        # Now handle token validation
-        token = token.strip('$').lower()
         message = None
 
+        # Process first parameter - could be either timeframe or token
+        first_param = token.lower()
+        second_param = timeframe.lower()
+
+        # Initialize variables
+        actual_timeframe = "7d"  # default
+        actual_token = "$lux"    # default
+
+        # Check if first parameter is a timeframe
+        if first_param.strip('$') in valid_timeframes:
+            actual_timeframe = first_param.strip('$')
+            # If second parameter exists, it's the token
+            if second_param != "7d":  # not the default
+                actual_token = second_param
+        else:
+            # First parameter is token
+            actual_token = first_param
+            # If second parameter is a valid timeframe, use it
+            if second_param in valid_timeframes:
+                actual_timeframe = second_param
+            else:
+                logger.warning(f"Invalid timeframe requested: {second_param}")
+                await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
+                return
+
+        # Process token
+        actual_token = actual_token.strip('$').lower()
+
         # Handle LUX separately as it's our primary token
-        if token == "lux":
+        if actual_token == "lux":
             token_id = "lux-token"
             token_name = "LUX"
             token_symbol = "LUX"
-            entry_price = 0.015  # NWA entry price
+            entry_price = 0.015  # Only used if show_takeover_line is True
         else:
             # Validate contract address format (simple check)
-            if not (len(token) == 43 or len(token) == 44):  # Solana addresses are typically 43/44 chars
+            if not (len(actual_token) == 43 or len(actual_token) == 44):  # Solana addresses are typically 43/44 chars
                 await ctx.send("❌ Invalid Solana contract address! Please provide a valid Solana contract address.")
                 return
 
             # Show searching message
-            message = await ctx.send(f"🔍 Searching for token info for contract: {token}...")
+            message = await ctx.send(f"🔍 Searching for token info for contract: {actual_token}...")
 
             # Get token info using contract address
-            token_info = await get_solana_token_by_contract(token)
+            token_info = await get_solana_token_by_contract(actual_token)
             if not token_info:
-                await message.edit(content=f"❌ No token found for contract address: {token}")
+                await message.edit(content=f"❌ No token found for contract address: {actual_token}")
                 return
 
             token_id, token_name, token_symbol = token_info
-            entry_price = None  # No entry price for other tokens
+            entry_price = None
 
             # Update message with found token info
             await message.edit(content=f"📊 Generating chart for {token_name} ({token_symbol})...")
 
-        # Generate meme
-        logger.info("Starting meme generation process")
+        # Generate meme without takeover line
+        logger.info(f"Starting meme generation process with timeframe {actual_timeframe}")
         meme_path = await generate_meme(
-            timeframe=timeframe,
+            timeframe=actual_timeframe,
             token_id=token_id,
             token_symbol=token_symbol,
-            entry_price=entry_price
+            entry_price=entry_price,
+            show_takeover_line=False  # Never show takeover line for regular meme command
         )
 
         if meme_path and os.path.exists(meme_path):
@@ -268,10 +292,69 @@ async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
                 await message.edit(content=f"Failed to generate chart! Token data not found! 📉")
             else:
                 await ctx.send(f"Failed to generate chart! Token data not found! 📉")
+
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")
         await ctx.send(f"Failed to generate meme! Error: {str(e)[:100]}... 💀")
+
+@bot.command(name='takeover')
+@commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
+async def takeover(ctx, timeframe: str = "7d"):
+    """Generate LUX price chart with NWA takeover line"""
+    logger.info(f'Starting takeover command execution for {ctx.author} with timeframe {timeframe}')
+    try:
+        await bot.change_presence(
+            activity=discord.Game(name="!help | Roasting Crypto"),
+            status=discord.Status.online
+        )
+
+        # Validate timeframe
+        valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
+        if timeframe.lower() not in valid_timeframes:
+            logger.warning(f"Invalid timeframe requested: {timeframe}")
+            await ctx.send("❌ Invalid timeframe! Use 1hr, 24hr, 7d, 1m, or 3m")
+            return
+
+        message = await ctx.send("📊 Generating NWA takeover chart...")
+
+        # Generate meme with takeover line
+        logger.info("Starting takeover chart generation")
+        meme_path = await generate_meme(
+            timeframe=timeframe,
+            token_id="lux-token",
+            token_symbol="LUX",
+            entry_price=0.015,
+            show_takeover_line=True  # Always show takeover line for takeover command
+        )
+
+        if meme_path and os.path.exists(meme_path):
+            try:
+                # Send the meme file
+                logger.info("Sending takeover chart to Discord")
+                with open(meme_path, 'rb') as f:
+                    await ctx.send(file=discord.File(f))
+                await message.delete()
+                logger.info("Successfully sent takeover chart")
+            except Exception as e:
+                logger.error(f"Error sending takeover chart: {str(e)}")
+                await message.edit(content="Failed to send chart! Error occurred while sending file.")
+                return
+
+            # Clean up the file
+            try:
+                os.remove(meme_path)
+                logger.info(f"Successfully cleaned up chart file: {meme_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up chart file: {str(e)}")
+        else:
+            error_msg = f"Invalid chart path or file: {meme_path}"
+            logger.error(error_msg)
+            await message.edit(content=f"Failed to generate takeover chart! 📉")
+    except Exception as e:
+        logger.error(f"Error in takeover command: {str(e)}")
+        logger.exception("Full traceback:")
+        await ctx.send(f"Failed to generate takeover chart! Error: {str(e)[:100]}... 💀")
 
 @bot.command(name='crash')
 @commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
@@ -398,6 +481,35 @@ async def list_wallet(ctx):
         logger.error(f"Error in list_wallet command: {str(e)}")
         await ctx.send("❌ Failed to retrieve wallet info")
 
+@bot.command(name='updatebalance')
+@commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
+async def force_update_balance(ctx):
+    """Force update your NWA token balance"""
+    if not wallet_manager:
+        await ctx.send("❌ Wallet system is currently unavailable")
+        return
+
+    try:
+        wallet = await wallet_manager.get_user_wallet(ctx.author.id)
+
+        if not wallet:
+            await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
+            return
+
+        message = await ctx.send("💰 Forcing balance update from blockchain...")
+
+        # Force update the balance
+        success, new_balance = await wallet_manager.force_balance_update(ctx.author.id)
+
+        if success and new_balance is not None:
+            await message.edit(content=f"✅ Balance updated! Current balance: `{int(new_balance):,} NWA`")
+            logger.info(f"Force updated balance to {new_balance:,} NWA tokens for user {ctx.author.id}")
+        else:
+            await message.edit(content="❌ Failed to update balance. Please try again later.")
+    except Exception as e:
+        logger.error(f"Error in force_update_balance command: {str(e)}")
+        await ctx.send("❌ Failed to update balance info")
+
 @bot.command(name='balance')
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
 async def check_balance(ctx):
@@ -414,12 +526,13 @@ async def check_balance(ctx):
             return
 
         # Update balance before displaying
+        message = await ctx.send("💰 Checking your NWA balance...")
         await wallet_manager.update_wallet_balance(ctx.author.id)
 
         # Get fresh wallet data after update
         wallet = await wallet_manager.get_user_wallet(ctx.author.id)
         if not wallet:
-            await ctx.send("❌ Error retrieving wallet data")
+            await message.edit(content="❌ Error retrieving wallet data")
             return
 
         # Format balance message with timestamp
@@ -431,10 +544,11 @@ async def check_balance(ctx):
         balance_msg = (
             f"💰 Your NWA Balance:\n"
             f"Amount: `{token_balance:,} NWA`\n"
-            f"Last Updated: {update_str}"
+            f"Last Updated: {update_str}\n"
+            f"Use `!updatebalance` to force an update"
         )
 
-        await ctx.send(balance_msg)
+        await message.edit(content=balance_msg)
         logger.info(f"Displayed balance of {token_balance:,} NWA tokens for user {ctx.author.id}")
     except Exception as e:
         logger.error(f"Error in check_balance command: {str(e)}")
@@ -476,6 +590,106 @@ async def check_airdrop(ctx):
         logger.error(f"Error in airdrop command: {str(e)}")
         await ctx.send("❌ Error processing eligibility check")
 
+@bot.command(name='startgiveaway')
+@commands.has_permissions(administrator=True)
+async def start_giveaway(ctx, *, prize: str):
+    """Start a new giveaway (Admin only)"""
+    if not giveaway_manager:
+        await ctx.send("❌ Giveaway system is currently unavailable")
+        return
+
+    if giveaway_manager.is_active():
+        await ctx.send("❌ A giveaway is already active! End it first with !endgiveaway")
+        return
+
+    if giveaway_manager.start_giveaway(ctx.author.id, prize):
+        announcement = (
+            f"🎉 **New Giveaway Started!** 🎉\n"
+            f"Prize: {prize}\n"
+            f"Requirements:\n"
+            f"• Hold at least 100,000 NWA tokens\n"
+            f"• Use !join to enter\n"
+            f"Good luck! 🍀"
+        )
+        await ctx.send(announcement)
+    else:
+        await ctx.send("❌ Failed to start giveaway")
+
+@bot.command(name='join')
+@commands.cooldown(1, 5, commands.BucketType.user)
+async def join_giveaway(ctx):
+    """Join the active giveaway"""
+    if not all([giveaway_manager, wallet_manager]):
+        await ctx.send("❌ Giveaway system is currently unavailable")
+        return
+
+    if not giveaway_manager.is_active():
+        await ctx.send("❌ No active giveaway to join! Wait for an admin to start one.")
+        return
+
+    # Check if user has already joined
+    if ctx.author.id in giveaway_manager.get_participants():
+        await ctx.send("❌ You've already joined this giveaway!")
+        return
+
+    # Verify token holdings
+    try:
+        success, balance, eligible = await wallet_manager.check_airdrop_eligibility(ctx.author.id)
+
+        if not success:
+            await ctx.send("❌ Failed to verify your token balance")
+            return
+
+        if not balance or balance < giveaway_manager.min_tokens_required:
+            await ctx.send(f"❌ You need at least {giveaway_manager.min_tokens_required:,} NWA tokens to join the giveaway!")
+            return
+
+        if giveaway_manager.add_participant(ctx.author.id):
+            await ctx.send(f"✅ You've successfully joined the giveaway! Good luck! 🍀")
+        else:
+            await ctx.send("❌ Failed to join the giveaway")
+
+    except Exception as e:
+        logger.error(f"Error in join_giveaway: {str(e)}")
+        await ctx.send("❌ Error processing your giveaway entry")
+
+@bot.command(name='endgiveaway')
+@commands.has_permissions(administrator=True)
+async def end_giveaway(ctx):
+    """End the current giveaway and pick a winner (Admin only)"""
+    if not giveaway_manager:
+        await ctx.send("❌ Giveaway system is currently unavailable")
+        return
+
+    giveaway = giveaway_manager.get_active_giveaway()
+    if not giveaway:
+        await ctx.send("❌ No active giveaway to end!")
+        return
+
+    participants = giveaway_manager.get_participants()
+    if not participants:
+        await ctx.send("❌ No one joined the giveaway!")
+        giveaway_manager.end_giveaway()
+        return
+
+    # Pick a winner
+    winner_id = random.choice(list(participants))
+    winner = ctx.guild.get_member(winner_id)
+    winner_mention = winner.mention if winner else f"User ID: {winner_id}"
+
+    # End the giveaway
+    giveaway_data = giveaway_manager.end_giveaway()
+
+    # Announce the winner
+    announcement = (
+        f"🎉 **Giveaway Ended!** 🎉\n"
+        f"Prize: {giveaway_data['prize']}\n"
+        f"Winner: {winner_mention}\n"
+        f"Total Participants: {len(participants)}\n"
+        f"Congratulations! 🎊"
+    )
+    await ctx.send(announcement)
+
 @bot.command(name='help')
 async def help_command(ctx):
     """Show available commands"""
@@ -492,13 +706,20 @@ async def help_command(ctx):
   - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
+• `!takeover` - Show LUX chart with NWA takeover line
 
 🏦 **NWA Wallet Commands** 🏦
 • `!linkwallet <address>` - Link your NWA wallet
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
 • `!balance` - Check your NWA token balance
+• `!updatebalance` - Force update your token balance
 • `!airdrop` - Check eligibility and claim airdrop
+
+🎉 **Giveaway Commands** 🎉
+• `!join` - Join the active giveaway (requires 100k NWA tokens)
+• `!startgiveaway <prize>` - Start a new giveaway (Admin only)
+• `!endgiveaway` - End giveaway and pick winner (Admin only)
     """
     await ctx.send(help_text)
 
@@ -571,7 +792,7 @@ async def main():
     except Exception as e:
         logger.critical(f"Critical error in main: {str(e)}")
         logger.exception("Full traceback:")
-        if not bot.is_closed():
+        if notbot.is_closed():
             await bot.close()
 
 def ensure_single_instance():

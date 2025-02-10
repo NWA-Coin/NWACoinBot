@@ -14,6 +14,7 @@ logger = logging.getLogger('discord_bot')
 # Constants for token configuration
 TOKEN_CONTRACT = "J9RZefdNW9eTCiVPLtke5rashEUGeVaXLk7iWFTupump"  # NWADEV token contract
 MIN_HOLDING_AMOUNT = 100000  # Minimum tokens required for airdrop
+AIRDROP_AMOUNT = 100000  # Amount of tokens to airdrop to eligible users
 
 # Solana API endpoints
 SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
@@ -78,7 +79,6 @@ class WalletManager:
                     if response.status == 200:
                         data = await response.json()
                         if 'result' in data and 'value' in data['result']:
-                            total_balance = 0
                             account_count = len(data['result']['value'])
                             logger.info(f"Found {account_count} token accounts to process")
 
@@ -91,26 +91,15 @@ class WalletManager:
                                         if info['mint'] == TOKEN_CONTRACT:
                                             # Get raw amount from tokenAmount
                                             token_amount = info['tokenAmount']
-                                            # Use amount field for precise integer value
+                                            # Use raw amount directly without decimal conversion
                                             raw_amount = int(token_amount['amount'])
-                                            # Always use 9 decimals for NWADEV token
-                                            decimals = 9
-                                            # Calculate actual amount - corrected calculation
-                                            amount = raw_amount // (10 ** decimals)
 
                                             logger.info(f"Token account {i}/{account_count} breakdown:")
                                             logger.info(f"  Raw amount from blockchain: {raw_amount}")
-                                            logger.info(f"  Using decimals: {decimals}")
-                                            logger.info(f"  Calculated amount: {amount}")
-                                            logger.info(f"  Calculation: {raw_amount} / (10 ^ {decimals}) = {amount}")
-                                            logger.info(f"  Running total before: {total_balance}")
 
-                                            total_balance += amount
-                                            logger.info(f"  Running total after: {total_balance}")
-
-                                            if total_balance > 0:
-                                                logger.info(f"Final total NWADEV balance for {wallet_address}: {total_balance:,} tokens")
-                                                return total_balance
+                                            if raw_amount > 0:
+                                                logger.info(f"Found positive balance: {raw_amount} tokens")
+                                                return raw_amount  # Return the raw amount without decimal conversion
 
                                 except (KeyError, ValueError) as e:
                                     logger.error(f"Error parsing account {i}/{account_count}: {str(e)}")
@@ -131,7 +120,7 @@ class WalletManager:
             logger.exception("Full traceback:")
             return None
 
-    async def update_wallet_balance(self, discord_id: int) -> bool:
+    async def update_wallet_balance(self, discord_id: int, force_update: bool = False) -> bool:
         """Update wallet token balance from Solana blockchain"""
         try:
             wallet = await self.get_user_wallet(discord_id)
@@ -145,6 +134,18 @@ class WalletManager:
             if balance is not None:
                 with psycopg2.connect(self.db_url) as conn:
                     with conn.cursor() as cur:
+                        # Log current balance before update
+                        cur.execute("""
+                            SELECT token_balance, last_balance_update
+                            FROM wallet_links
+                            WHERE discord_id = %s AND verified = TRUE
+                        """, (discord_id,))
+                        current = cur.fetchone()
+
+                        if current:
+                            old_balance, last_update = current
+                            logger.info(f"Current balance: {old_balance}, Last update: {last_update}")
+
                         cur.execute("""
                             UPDATE wallet_links 
                             SET token_balance = %s,
@@ -157,7 +158,7 @@ class WalletManager:
                         conn.commit()
 
                         if result:
-                            logger.info(f"Updated balance for {result[0]} to {balance} NWADEV tokens")
+                            logger.info(f"Updated balance for {result[0]} to {balance} tokens")
                             return True
                         else:
                             logger.warning(f"No wallet record found to update for discord_id {discord_id}")
@@ -170,6 +171,47 @@ class WalletManager:
             logger.error(f"Error updating wallet balance: {str(e)}")
             logger.exception("Full traceback:")
             return False
+
+    async def force_balance_update(self, discord_id: int) -> Tuple[bool, Optional[int]]:
+        """Force an immediate balance update and return the new balance"""
+        try:
+            wallet = await self.get_user_wallet(discord_id)
+            if not wallet:
+                logger.warning(f"No verified wallet found for discord_id {discord_id}")
+                return False, None
+
+            logger.info(f"Force updating balance for wallet: {wallet['wallet_address']}")
+            balance = await self.get_token_balance(wallet['wallet_address'])
+
+            if balance is not None:
+                with psycopg2.connect(self.db_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE wallet_links 
+                            SET token_balance = %s,
+                                last_balance_update = NOW()
+                            WHERE discord_id = %s AND verified = TRUE
+                            RETURNING token_balance
+                        """, (balance, discord_id))
+
+                        result = cur.fetchone()
+                        conn.commit()
+
+                        if result:
+                            new_balance = result[0]
+                            logger.info(f"Force updated balance for {wallet['wallet_address']} to {new_balance} tokens")
+                            return True, new_balance
+                        else:
+                            logger.warning(f"No wallet record found to update for discord_id {discord_id}")
+                            return False, None
+            else:
+                logger.error("Could not fetch current balance from Solana")
+                return False, None
+
+        except Exception as e:
+            logger.error(f"Error in force balance update: {str(e)}")
+            logger.exception("Full traceback:")
+            return False, None
 
     async def check_airdrop_eligibility(self, discord_id: int) -> Tuple[bool, Optional[float], bool]:
         """Check if user is eligible for airdrop"""

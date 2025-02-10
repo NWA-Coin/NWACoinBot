@@ -7,7 +7,7 @@ from price_chart import create_price_chart
 # Set up logging
 logger = logging.getLogger('discord_bot')
 
-async def generate_meme(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None):
+async def generate_meme(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None, show_takeover_line=False):
     """Generate a price chart meme."""
     try:
         logger.info(f"Starting meme generation for {token_symbol} with timeframe {timeframe}")
@@ -17,7 +17,8 @@ async def generate_meme(timeframe="1hr", token_id="lux-token", token_symbol="LUX
             timeframe=timeframe,
             token_id=token_id,
             token_symbol=token_symbol,
-            entry_price=entry_price
+            entry_price=entry_price,
+            show_takeover_line=show_takeover_line
         )
 
         if not chart_path or not timestamps or not prices:

@@ -69,7 +69,7 @@ async def get_lux_price_history(timeframe="1hr", token_id="lux-token"):
         logger.error(f"Error in price history retrieval: {str(e)}")
         return None, None
 
-async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None):
+async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None, show_takeover_line=False):
     """Create a simple line chart showing price movement."""
     try:
         # Get price data
@@ -95,7 +95,7 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
         chart_height = height - (top_padding + bottom_padding)
 
         # Calculate price range
-        if entry_price is not None:
+        if entry_price is not None and show_takeover_line:
             max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
             min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
         else:
@@ -119,8 +119,8 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
         label_color = '#FFFFFF'
         line_color = '#FF3333'
 
-        # Calculate crash percentage if entry price is provided
-        if entry_price is not None:
+        # Calculate crash percentage if entry price is provided and showing takeover line
+        if entry_price is not None and show_takeover_line:
             crash_percent = ((entry_price - prices[-1]) / entry_price) * 100
         else:
             crash_percent = None
@@ -143,7 +143,7 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
         draw.text((title_x, title_y), title, font=title_font, fill='#FFFFFF')
 
         # Add crash percentage text under title if applicable
-        if crash_percent is not None:
+        if crash_percent is not None and show_takeover_line:
             crash_text = f"Down {crash_percent:.1f}% Since NWA Takeover"
             crash_width = draw.textlength(crash_text, font=crash_font)
             crash_x = (img.width - crash_width) / 2
@@ -166,8 +166,8 @@ async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
 
-        # Draw entry price line if provided
-        if entry_price is not None:
+        # Draw entry price line if showing takeover line
+        if entry_price is not None and show_takeover_line:
             entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
             # Draw dashed line using small segments
             dash_length = 10
