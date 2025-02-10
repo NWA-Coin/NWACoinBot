@@ -21,13 +21,13 @@ RETRY_DELAY = 5  # seconds
 async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[List[Dict]]]:
     """Fetch live LUX market data from CoinGecko API with retries."""
     try:
-        # Map timeframes to days for API request
+        # Map timeframes to days for API request - increased data points
         timeframe_map = {
             "1hr": "1",     # 1 day of data (we'll filter to last hour)
-            "24hr": "2",    # 2 days of data
-            "7d": "7",     # 7 days of data
-            "1m": "30",    # 30 days of data
-            "3m": "90"     # 90 days of data
+            "24hr": "2",    # 2 days of data (more data points)
+            "7d": "7",      # 7 days of data
+            "1m": "30",     # 30 days of data
+            "3m": "90"      # 90 days of data
         }
 
         days = timeframe_map.get(timeframe, "3")
@@ -40,10 +40,14 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     logger.info(f"Attempt {retry + 1}/{MAX_RETRIES} to fetch market data")
 
+                    # Add interval parameter for more granular data
                     params = {
                         "vs_currency": "usd",
                         "days": days,
+                        "interval": "5minute" if timeframe in ["1hr", "24hr"] else None  # 5-minute intervals for short timeframes
                     }
+                    # Remove None values from params
+                    params = {k: v for k, v in params.items() if v is not None}
 
                     headers = {}
                     if COINGECKO_API_KEY:
@@ -73,12 +77,23 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                                     await asyncio.sleep(RETRY_DELAY * (retry + 1))
                                 continue
 
-                            # Filter data points based on timeframe
+                            # Filter data points based on timeframe with buffer for smoother charts
                             if timeframe == "1hr":
-                                cutoff_time = int((datetime.now() - timedelta(hours=1)).timestamp() * 1000)
+                                cutoff_time = int((datetime.now() - timedelta(hours=1, minutes=5)).timestamp() * 1000)
+                                price_data = [p for p in price_data if p[0] >= cutoff_time]
+                            elif timeframe == "24hr":
+                                cutoff_time = int((datetime.now() - timedelta(hours=24, minutes=30)).timestamp() * 1000)
                                 price_data = [p for p in price_data if p[0] >= cutoff_time]
 
                             logger.info(f"After filtering: {len(price_data)} price points")
+
+                            # Ensure minimum number of data points
+                            min_points = 30  # Minimum points for a smooth chart
+                            if len(price_data) < min_points:
+                                logger.warning(f"Insufficient data points ({len(price_data)} < {min_points})")
+                                if retry < MAX_RETRIES - 1:
+                                    await asyncio.sleep(RETRY_DELAY * (retry + 1))
+                                continue
 
                             timestamps = []
                             prices = []
@@ -90,12 +105,6 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
 
                                 timestamps.append(timestamp)
                                 prices.append(price)
-
-                            if len(timestamps) < 2:
-                                logger.error("Insufficient price data points")
-                                if retry < MAX_RETRIES - 1:
-                                    await asyncio.sleep(RETRY_DELAY * (retry + 1))
-                                continue
 
                             logger.info(f"Successfully processed {len(timestamps)} price points")
                             logger.info(f"Latest price: ${prices[-1]:.6f}")
