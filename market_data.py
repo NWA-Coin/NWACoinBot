@@ -11,15 +11,18 @@ logger = logging.getLogger('discord_bot')
 # Constants for CoinGecko API
 COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY')
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
-LUX_ID = "lux-token"  # CoinGecko asset ID for LUX token
+
+# Default token info moved to variables
+DEFAULT_TOKEN_ID = "lux-token"  # CoinGecko asset ID for LUX token
+DEFAULT_ENTRY_PRICE = 0.015  # NWA entry price for LUX
 
 # Rate limiting configuration
 MIN_API_INTERVAL = 30  # Minimum seconds between API calls
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
-async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[List[Dict]]]:
-    """Fetch live LUX market data from CoinGecko API with retries."""
+async def fetch_market_data(token_id=DEFAULT_TOKEN_ID, timeframe="1hr") -> Tuple[Optional[List[int]], Optional[List[float]], Optional[Dict]]:
+    """Fetch live market data from CoinGecko API with retries."""
     try:
         # Map timeframes to days for API request
         timeframe_map = {
@@ -31,14 +34,14 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
         }
 
         days = timeframe_map.get(timeframe, "2")  # Default to 2 days if timeframe not found
-        logger.info(f"Fetching {days} days of price data for timeframe {timeframe}")
+        logger.info(f"Fetching {days} days of price data for {token_id} with timeframe {timeframe}")
 
         timeout = aiohttp.ClientTimeout(total=15)
 
         for retry in range(MAX_RETRIES):
             try:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
-                    logger.info(f"Attempt {retry + 1}/{MAX_RETRIES} to fetch market data")
+                    logger.info(f"Attempt {retry + 1}/{MAX_RETRIES} to fetch market data for {token_id}")
 
                     params = {
                         "vs_currency": "usd",
@@ -50,7 +53,7 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                         headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
                         logger.info("Using CoinGecko API key")
 
-                    endpoint = f"{COINGECKO_BASE_URL}/coins/{LUX_ID}/market_chart"
+                    endpoint = f"{COINGECKO_BASE_URL}/coins/{token_id}/market_chart"
                     logger.info(f"Requesting data from {endpoint}")
 
                     async with session.get(endpoint, params=params, headers=headers) as response:
@@ -79,7 +82,6 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                                 price_data = [p for p in price_data if p[0] >= cutoff_time]
                                 logger.info(f"Filtered to last hour: {len(price_data)} points")
 
-                            # Ensure minimum number of data points
                             if len(price_data) < 2:
                                 logger.error("Insufficient data points after filtering")
                                 if retry < MAX_RETRIES - 1:
@@ -89,7 +91,6 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
                             timestamps = []
                             prices = []
 
-                            # Process data points
                             for point in price_data:
                                 timestamp = int(point[0])
                                 price = float(point[1])
@@ -121,6 +122,6 @@ async def fetch_lux_market_data(timeframe="1hr") -> Tuple[Optional[List[int]], O
         return None, None, None
 
     except Exception as e:
-        logger.error(f"Unexpected error in fetch_lux_market_data: {str(e)}")
+        logger.error(f"Unexpected error in fetch_market_data: {str(e)}")
         logger.exception("Full traceback:")
         return None, None, None

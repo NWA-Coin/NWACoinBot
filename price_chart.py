@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 import pytz
 from PIL import Image, ImageDraw, ImageFont
-from market_data import fetch_lux_market_data
+from market_data import fetch_market_data  # Updated import
 import math
 
 # Set up logging
@@ -53,11 +53,11 @@ def format_time_label(timestamp, timeframe):
         logger.error(f"Error formatting time label: {str(e)}")
         return "N/A", "N/A"
 
-async def get_lux_price_history(timeframe="1hr"):
-    """Get LUX price history with specified timeframe."""
+async def get_lux_price_history(timeframe="1hr", token_id="lux-token"):
+    """Get price history with specified timeframe."""
     try:
-        logger.info(f"Fetching live LUX price data for timeframe {timeframe}")
-        timestamps, prices, _ = await fetch_lux_market_data(timeframe)
+        logger.info(f"Fetching live price data for {token_id} with timeframe {timeframe}")
+        timestamps, prices, _ = await fetch_market_data(token_id, timeframe)  # Updated function call
 
         if timestamps and prices:
             logger.info(f"Successfully retrieved {len(prices)} price points")
@@ -70,12 +70,12 @@ async def get_lux_price_history(timeframe="1hr"):
         logger.error(f"Error in price history retrieval: {str(e)}")
         return None, None
 
-async def create_price_chart(timeframe="1hr"):
+async def create_price_chart(timeframe="1hr", token_id="lux-token", token_symbol="LUX", entry_price=None):
     """Create a simple line chart showing price movement."""
     try:
         # Get price data
-        logger.info(f"Starting price chart generation for timeframe {timeframe}")
-        timestamps, prices = await get_lux_price_history(timeframe)
+        logger.info(f"Starting price chart generation for {token_symbol} with timeframe {timeframe}")
+        timestamps, prices = await get_lux_price_history(timeframe, token_id)
         if not timestamps or not prices:
             logger.error("Failed to get price data")
             return None, None, None
@@ -96,9 +96,13 @@ async def create_price_chart(timeframe="1hr"):
         chart_height = height - (top_padding + bottom_padding)
 
         # Calculate price range
-        entry_price = 0.015  # NWA entry price
-        max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
-        min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
+        if entry_price is not None:
+            max_price = max(max(prices), entry_price) * 1.05  # Add 5% padding
+            min_price = min(min(prices), entry_price) * 0.95  # Add 5% padding
+        else:
+            max_price = max(prices) * 1.05  # Add 5% padding
+            min_price = min(prices) * 0.95  # Add 5% padding
+
         price_range = max_price - min_price
 
         # Load fonts
@@ -116,6 +120,45 @@ async def create_price_chart(timeframe="1hr"):
         label_color = '#FFFFFF'
         line_color = '#FF3333'
 
+        # Calculate crash percentage if entry price is provided
+        if entry_price is not None:
+            crash_percent = ((entry_price - prices[-1]) / entry_price) * 100
+        else:
+            crash_percent = None
+
+        # Title text settings with background outline for better visibility
+        title = f"${token_symbol} {timeframe} Chart"
+        title_width = draw.textlength(title, font=title_font)
+        title_x = (img.width - title_width) / 2
+        title_y = 30
+
+        # Draw title with outline
+        outline_color = '#000000'
+        outline_width = 2
+        for dx in range(-outline_width, outline_width + 1):
+            for dy in range(-outline_width, outline_width + 1):
+                if dx != 0 or dy != 0:
+                    draw.text((title_x + dx, title_y + dy), title, font=title_font, fill=outline_color)
+
+        # Draw main title text
+        draw.text((title_x, title_y), title, font=title_font, fill='#FFFFFF')
+
+        # Add crash percentage text under title if applicable
+        if crash_percent is not None:
+            crash_text = f"Down {crash_percent:.1f}% Since Entry"
+            crash_width = draw.textlength(crash_text, font=crash_font)
+            crash_x = (img.width - crash_width) / 2
+            crash_y = title_y + 60
+
+            # Draw crash text with outline
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        draw.text((crash_x + dx, crash_y + dy), crash_text, font=crash_font, fill=outline_color)
+
+            # Draw main crash text in red
+            draw.text((crash_x, crash_y), crash_text, font=crash_font, fill='#FF0000')
+
         # Draw horizontal grid lines and price labels
         for i in range(6):
             price = min_price + (i * (price_range / 5))
@@ -124,22 +167,24 @@ async def create_price_chart(timeframe="1hr"):
             price_str = format_price_label(price)
             draw.text((10, y - 16), price_str, fill=label_color, font=price_font)
 
-        # Draw NWA entry price line
-        entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
-        # Draw dashed line using small segments
-        dash_length = 10
-        x_start = padding
-        x_end = width - padding
+        # Draw entry price line if provided
+        if entry_price is not None:
+            entry_y = top_padding + ((max_price - entry_price) * chart_height / price_range)
+            # Draw dashed line using small segments
+            dash_length = 10
+            x_start = padding
+            x_end = width - padding
 
-        for x in range(int(x_start), int(x_end), dash_length * 2):
-            draw.line([(x, entry_y), (x + dash_length, entry_y)], 
-                     fill='#4444FF', width=2)
+            # Draw blue dashed line
+            for x in range(int(x_start), int(x_end), dash_length * 2):
+                draw.line([(x, entry_y), (x + dash_length, entry_y)], 
+                         fill='#0000FF', width=2)
 
-        # Add label for NWA price line
-        label = "NWA Entry (1.5¢)"
-        label_width = draw.textlength(label, font=time_font)
-        draw.text((x_start + 10, entry_y - 20), label, 
-                 font=time_font, fill='#4444FF')
+            # Add label for entry price line in white
+            label = f"Entry Price ({format_price_label(entry_price)})"
+            label_width = draw.textlength(label, font=time_font)
+            draw.text((x_start + 10, entry_y - 20), label, 
+                     font=time_font, fill='#FFFFFF')
 
         # Draw time labels and vertical grid lines
         for i in range(8):

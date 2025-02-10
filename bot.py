@@ -63,7 +63,7 @@ async def on_ready():
     logger.info('Available commands: !help, !roast, !meme, !crash, !ping')
 
     await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting LUX"),
+        activity=discord.Game(name="!help | Roasting Crypto"),
         status=discord.Status.online
     )
 
@@ -72,7 +72,7 @@ async def on_resumed():
     """Log when the bot resumes a session after disconnect"""
     logger.info("Bot resumed connection")
     await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting LUX"),
+        activity=discord.Game(name="!help | Roasting Crypto"),
         status=discord.Status.online
     )
 
@@ -152,7 +152,7 @@ async def roast(ctx):
     logger.info(f'Executing roast command for {ctx.author}')
     try:
         await bot.change_presence(
-            activity=discord.Game(name="!help | Roasting LUX"),
+            activity=discord.Game(name="!help | Roasting Crypto"),
             status=discord.Status.online
         )
         logger.info("Sending initial response...")
@@ -171,14 +171,30 @@ async def roast(ctx):
 
 @bot.command(name='meme')
 @commands.cooldown(1, 5, commands.BucketType.user)  # Rate limit: 1 use per 5 seconds per user
-async def meme(ctx, timeframe: str = "7d"):
-    """Generate price chart meme with specified timeframe"""
-    logger.info(f'Starting meme command execution for {ctx.author} with timeframe {timeframe}')
+async def meme(ctx, token: str = "$lux", timeframe: str = "7d"):
+    """Generate price chart meme with specified token and timeframe"""
+    logger.info(f'Starting meme command execution for {ctx.author} with token {token} and timeframe {timeframe}')
     try:
         await bot.change_presence(
-            activity=discord.Game(name="!help | Roasting LUX"),
+            activity=discord.Game(name="!help | Roasting Crypto"),
             status=discord.Status.online
         )
+
+        # Clean and validate token
+        token = token.strip('$').lower()
+
+        # Map common token symbols to CoinGecko IDs
+        token_map = {
+            "lux": {"id": "lux-token", "entry": 0.015},  # LUX with NWA entry price
+            "btc": {"id": "bitcoin", "entry": None},
+            "eth": {"id": "ethereum", "entry": None},
+            # Add more mappings as needed
+        }
+
+        if token not in token_map:
+            logger.warning(f"Unsupported token requested: {token}")
+            await ctx.send("❌ Unsupported token! Currently supporting: $LUX, $BTC, $ETH")
+            return
 
         # Validate timeframe
         valid_timeframes = {"1hr", "24hr", "7d", "1m", "3m"}
@@ -188,12 +204,15 @@ async def meme(ctx, timeframe: str = "7d"):
             return
 
         # Send initial message
-        logger.info(f"Sending initial message for timeframe {timeframe}")
-        message = await ctx.send(f"🔥 Generating LUX price chart ({timeframe})... 📉")
+        token_upper = token.upper()
+        logger.info(f"Sending initial message for {token_upper} with timeframe {timeframe}")
+        message = await ctx.send(f"📊 Generating ${token_upper} price chart ({timeframe})...")
 
-        # Generate meme with explicit timeframe parameter
+        # Generate meme with token parameters
         logger.info("Starting meme generation process")
-        meme_path = await generate_meme(timeframe=timeframe)
+        token_info = token_map[token]
+        meme_path = await generate_meme(timeframe=timeframe, token_id=token_info["id"], 
+                                      token_symbol=token_upper, entry_price=token_info["entry"])
         logger.info(f"Meme generation completed, path: {meme_path}")
 
         if meme_path and os.path.exists(meme_path):
@@ -218,7 +237,7 @@ async def meme(ctx, timeframe: str = "7d"):
         else:
             error_msg = f"Invalid meme path or file: {meme_path}"
             logger.error(error_msg)
-            await message.edit(content="Failed to generate chart! LUX price data not found! 📉")
+            await message.edit(content=f"Failed to generate chart! {token_upper} price data not found! 📉")
     except Exception as e:
         logger.error(f"Error in meme command: {str(e)}")
         logger.exception("Full traceback:")
@@ -231,7 +250,7 @@ async def crash(ctx):
     logger.info(f'Executing crash command for {ctx.author}')
     try:
         await bot.change_presence(
-            activity=discord.Game(name="!help | Roasting LUX"),
+            activity=discord.Game(name="!help | Roasting Crypto"),
             status=discord.Status.online
         )
         message = await ctx.send("💥 Fetching latest LUX crash data...")
@@ -267,14 +286,15 @@ async def help_command(ctx):
     """Show available commands"""
     logger.info(f'Executing help command for {ctx.author}')
     await bot.change_presence(
-        activity=discord.Game(name="!help | Roasting LUX"),
+        activity=discord.Game(name="!help | Roasting Crypto"),
         status=discord.Status.online
     )
     help_text = """
-🔥 **$LUXSUX Bot Commands** 🔥
+🔥 **Crypto Chart Bot Commands** 🔥
 • `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
-• `!meme [timeframe]` - Generate a price chart meme
+• `!meme [token] [timeframe]` - Generate a price chart meme
+  - Tokens: $LUX, $BTC, $ETH
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
     """
