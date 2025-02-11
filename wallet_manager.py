@@ -54,12 +54,24 @@ class WalletManager:
             raise
 
     async def get_token_balance(self, wallet_address: str, contract_address: Optional[str] = None) -> Optional[int]:
-        """Get token balance for a Solana wallet"""
+        """Get token balance for a Solana wallet with simplified error handling"""
         try:
             if not contract_address:
                 contract_address = TOKEN_CONTRACT
 
             logger.info(f"Checking balance for wallet {wallet_address} and contract {contract_address}")
+
+            # Simple base58 validation
+            try:
+                if not (len(wallet_address) == 43 or len(wallet_address) == 44):
+                    logger.error("Invalid wallet address length")
+                    return None
+                if not (len(contract_address) == 43 or len(contract_address) == 44):
+                    logger.error("Invalid contract address length")
+                    return None
+            except Exception as e:
+                logger.error(f"Address validation error: {str(e)}")
+                return None
 
             async with aiohttp.ClientSession() as session:
                 payload = {
@@ -76,49 +88,45 @@ class WalletManager:
                     ]
                 }
 
-                logger.info(f"Querying token accounts for wallet: {wallet_address}")
-                logger.info(f"Using token contract: {contract_address}")
-
-                async with session.post(SOLANA_RPC_URL, json=payload) as response:
+                async with session.post(SOLANA_RPC_URL, json=payload, timeout=30) as response:
                     if response.status == 200:
                         data = await response.json()
                         if 'result' in data and 'value' in data['result']:
                             total_balance = 0
                             for account in data['result']['value']:
-                                try:
-                                    parsed_data = account['account']['data']['parsed']
-                                    if 'info' in parsed_data:
-                                        info = parsed_data['info']
-                                        if info['mint'] == contract_address:
-                                            token_amount = info['tokenAmount']
-                                            balance = int(token_amount['amount'])
-                                            total_balance += balance
-                                except Exception as e:
-                                    logger.error(f"Error parsing account: {str(e)}")
-                                    continue
+                                if 'account' in account and 'data' in account['account']:
+                                    try:
+                                        token_data = account['account']['data']['parsed']['info']
+                                        if token_data['mint'] == contract_address:
+                                            amount = int(token_data['tokenAmount']['amount'])
+                                            total_balance += amount
+                                    except (KeyError, ValueError) as e:
+                                        logger.error(f"Error parsing token data: {str(e)}")
+                                        continue
 
-                            logger.info(f"Total balance found: {total_balance}")
+                            logger.info(f"Successfully fetched balance: {total_balance}")
                             return total_balance
 
-                    logger.error(f"Failed to get token accounts: {response.status}")
+                    logger.error(f"Failed to fetch token balance. Status: {response.status}")
                     return None
 
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {str(e)}")
+            return None
         except Exception as e:
-            logger.error(f"Error getting token balance: {str(e)}")
+            logger.error(f"Unexpected error: {str(e)}")
             logger.exception("Full traceback:")
             return None
 
     async def update_wallet_balance(self, discord_id: int) -> bool:
-        """Update wallet token balance from Solana blockchain"""
+        """Update wallet token balance with simplified logic"""
         try:
             wallet = await self.get_user_wallet(discord_id)
             if not wallet:
                 logger.warning(f"No verified wallet found for discord_id {discord_id}")
                 return False
 
-            logger.info(f"Updating balance for wallet: {wallet['wallet_address']}")
             balance = await self.get_token_balance(wallet['wallet_address'])
-
             if balance is not None:
                 with psycopg2.connect(self.db_url) as conn:
                     with conn.cursor() as cur:
@@ -127,21 +135,19 @@ class WalletManager:
                             SET token_balance = %s,
                                 last_balance_update = NOW()
                             WHERE discord_id = %s AND verified = TRUE
-                            RETURNING wallet_address
+                            RETURNING id
                         """, (balance, discord_id))
 
-                        result = cur.fetchone()
-                        conn.commit()
-
-                        if result:
-                            logger.info(f"Updated balance for {result[0]} to {balance} tokens")
+                        if cur.fetchone():
+                            conn.commit()
+                            logger.info(f"Updated balance for {wallet['wallet_address']} to {balance}")
                             return True
-                        else:
-                            logger.warning(f"No wallet record found to update for discord_id {discord_id}")
-                            return False
-            else:
-                logger.error("Could not fetch current balance from Solana")
-                return False
+
+                        logger.error("Failed to update database record")
+                        return False
+
+            logger.error("Could not fetch current balance")
+            return False
 
         except Exception as e:
             logger.error(f"Error updating wallet balance: {str(e)}")
@@ -149,19 +155,19 @@ class WalletManager:
             return False
 
     async def force_balance_update(self, discord_id: int, contract_address: Optional[str] = None) -> Tuple[bool, Optional[int]]:
-        """Force an immediate balance update and return the new balance"""
+        """Force an immediate balance update with simplified logic"""
         try:
             wallet = await self.get_user_wallet(discord_id)
             if not wallet:
                 logger.warning(f"No verified wallet found for discord_id {discord_id}")
                 return False, None
 
-            logger.info(f"Force updating balance for wallet: {wallet['wallet_address']}")
+            logger.info(f"Forcing balance update for wallet: {wallet['wallet_address']}")
             balance = await self.get_token_balance(wallet['wallet_address'], contract_address)
 
             if balance is not None:
-                if contract_address == TOKEN_CONTRACT or contract_address is None:
-                    # Only update database for NWA token
+                # Only update database for main NWA token
+                if not contract_address or contract_address == TOKEN_CONTRACT:
                     with psycopg2.connect(self.db_url) as conn:
                         with conn.cursor() as cur:
                             cur.execute("""
@@ -169,21 +175,18 @@ class WalletManager:
                                 SET token_balance = %s,
                                     last_balance_update = NOW()
                                 WHERE discord_id = %s AND verified = TRUE
-                                RETURNING token_balance
+                                RETURNING id
                             """, (balance, discord_id))
+                            if cur.fetchone():
+                                conn.commit()
+                                logger.info(f"Updated database balance to {balance}")
+                            else:
+                                logger.error("Failed to update database balance")
+                                return False, None
 
-                            result = cur.fetchone()
-                            conn.commit()
-
-                            if result:
-                                logger.info(f"Force updated balance for {wallet['wallet_address']} to {balance} tokens")
-                                return True, balance
-
-                # For other tokens, just return the balance without updating DB
                 return True, balance
-            else:
-                logger.error("Could not fetch current balance from Solana")
-                return False, None
+
+            return False, None
 
         except Exception as e:
             logger.error(f"Error in force balance update: {str(e)}")
@@ -446,3 +449,37 @@ class WalletManager:
         except Exception as e:
             logger.error(f"Error getting unclaimed wallets: {str(e)}")
             return []
+
+    async def unlink_wallet(self, discord_id: int) -> Tuple[bool, str]:
+        """Unlink a wallet from a Discord user"""
+        try:
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cur:
+                    # Check if user has a verified wallet
+                    cur.execute("""
+                        SELECT wallet_address 
+                        FROM wallet_links 
+                        WHERE discord_id = %s
+                    """, (discord_id,))
+                    result = cur.fetchone()
+
+                    if not result:
+                        return False, "You don't have a linked wallet to unlink!"
+
+                    # Delete the wallet link
+                    cur.execute("""
+                        DELETE FROM wallet_links 
+                        WHERE discord_id = %s
+                        RETURNING wallet_address
+                    """, (discord_id,))
+                    deleted = cur.fetchone()
+                    conn.commit()
+
+                    if deleted:
+                        logger.info(f"Unlinked wallet {deleted[0]} from discord_id {discord_id}")
+                        return True, f"Successfully unlinked wallet: `{deleted[0]}`"
+                    return False, "Failed to unlink wallet"
+
+        except Exception as e:
+            logger.error(f"Error unlinking wallet: {str(e)}")
+            return False, "An error occurred while unlinking the wallet"
