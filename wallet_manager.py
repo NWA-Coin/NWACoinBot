@@ -7,6 +7,8 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional, Tuple, Dict
+#import trafilatura # Removed as we are not using web scraping anymore
+import re
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -53,8 +55,12 @@ class WalletManager:
             logger.error(f"Database setup error: {str(e)}")
             raise
 
+    #async def get_balance_from_solscan(self, wallet_address: str, contract_address: str = None) -> Optional[int]:  #Removed Solscan function
+    #    """Fetch token balance from Solscan website with improved reliability"""
+    #    ...  #Removed Solscan function
+
     async def get_token_balance(self, wallet_address: str, contract_address: Optional[str] = None) -> Optional[int]:
-        """Get token balance for a Solana wallet with simplified error handling"""
+        """Get token balance using RPC endpoints with proper SPL token account lookup"""
         try:
             if not contract_address:
                 contract_address = TOKEN_CONTRACT
@@ -73,48 +79,78 @@ class WalletManager:
                 logger.error(f"Address validation error: {str(e)}")
                 return None
 
+            # Use multiple RPC endpoints for redundancy
+            rpc_endpoints = [
+                "https://api.mainnet-beta.solana.com",
+                "https://solana-mainnet.rpc.extrnode.com",
+                "https://api.mainnet.rpcpool.com",
+            ]
+
             async with aiohttp.ClientSession() as session:
-                payload = {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getTokenAccountsByOwner",
-                    "params": [
-                        wallet_address,
-                        {
-                            "mint": contract_address,
-                            "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-                        },
-                        {"encoding": "jsonParsed"}
-                    ]
-                }
+                for endpoint in rpc_endpoints:
+                    try:
+                        # Use getProgramAccounts to find all token accounts
+                        payload = {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "getProgramAccounts",
+                            "params": [
+                                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  # SPL Token Program ID
+                                {
+                                    "encoding": "jsonParsed",
+                                    "filters": [
+                                        {
+                                            "dataSize": 165  # Size of token account data
+                                        },
+                                        {
+                                            "memcmp": {
+                                                "offset": 32,  # Offset for owner field
+                                                "bytes": wallet_address
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
 
-                async with session.post(SOLANA_RPC_URL, json=payload, timeout=30) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if 'result' in data and 'value' in data['result']:
-                            total_balance = 0
-                            for account in data['result']['value']:
-                                if 'account' in account and 'data' in account['account']:
-                                    try:
-                                        token_data = account['account']['data']['parsed']['info']
-                                        if token_data['mint'] == contract_address:
-                                            amount = int(token_data['tokenAmount']['amount'])
-                                            total_balance += amount
-                                    except (KeyError, ValueError) as e:
-                                        logger.error(f"Error parsing token data: {str(e)}")
-                                        continue
+                        logger.info(f"Querying {endpoint} for token accounts...")
+                        async with session.post(endpoint, json=payload, timeout=10) as response:
+                            if response.status == 200:
+                                data = await response.json()
 
-                            logger.info(f"Successfully fetched balance: {total_balance}")
-                            return total_balance
+                                if 'result' in data:
+                                    total_balance = 0
+                                    for account in data['result']:
+                                        try:
+                                            parsed_data = account['account']['data']['parsed']['info']
+                                            if parsed_data['mint'] == contract_address:
+                                                balance = int(parsed_data['tokenAmount']['amount'])
+                                                total_balance += balance
+                                                logger.info(f"Found token account with balance: {balance}")
+                                        except (KeyError, ValueError) as e:
+                                            logger.warning(f"Error parsing account data: {str(e)}")
+                                            continue
 
-                    logger.error(f"Failed to fetch token balance. Status: {response.status}")
-                    return None
+                                    if total_balance > 0:
+                                        logger.info(f"Total balance found: {total_balance}")
+                                        return total_balance
 
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error: {str(e)}")
+                                    logger.warning("No matching token accounts found")
+                                else:
+                                    logger.warning(f"No result field in response from {endpoint}")
+
+                    except aiohttp.ClientError as e:
+                        logger.warning(f"Failed to fetch from {endpoint}: {str(e)}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Unexpected error with {endpoint}: {str(e)}")
+                        continue
+
+            logger.error("All RPC endpoints failed to return balance")
             return None
+
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.error(f"Unexpected error in get_token_balance: {str(e)}")
             logger.exception("Full traceback:")
             return None
 

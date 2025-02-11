@@ -521,7 +521,6 @@ async def force_update_balance(ctx, contract_address: str = None):
             token_name = "NWA" if not contract_address else f"Token ({contract_address[:8]}...)"
             formatted_balance = f"{int(balance):,}"
 
-            # Format response message
             response = f"✅ Balance Updated!\n`{formatted_balance} {token_name}`"
             if contract_address:
                 response += f"\nContract: `{contract_address}`"
@@ -552,28 +551,21 @@ async def check_balance(ctx):
             return
 
         message = await ctx.send("💰 Checking your NWA balance...")
-        success = await wallet_manager.update_wallet_balance(ctx.author.id)
 
-        if success:
-            # Get updated wallet data
-            wallet = await wallet_manager.get_user_wallet(ctx.author.id)
-            if wallet:
-                last_update = wallet['last_balance_update']
-                update_time = f"<t:{int(last_update.timestamp())}:R>" if last_update else "Never"
-                formatted_balance = f"{int(wallet['token_balance']):,}"
+        # Force update balance to get latest data
+        success, balance = await wallet_manager.force_balance_update(ctx.author.id)
 
-                response = (
-                    f"💰 NWA Balance: `{formatted_balance} NWA`\n"
-                    f"Last Updated: {update_time}\n\n"
-                    f"💡 Tip: Use `!updatebalance <contract>` to check other token balances"
-                )
-
-                await message.edit(content=response)
-                logger.info(f"Displayed balance {formatted_balance} for user {ctx.author.id}")
-            else:
-                await message.edit(content="❌ Failed to retrieve updated balance")
+        if success and balance is not None:
+            formatted_balance = f"{int(balance):,}"
+            response = (
+                f"💰 NWA Balance: `{formatted_balance} NWA`\n"
+                f"Last Updated: <t:{int(datetime.now().timestamp())}:R>\n\n"
+                f"💡 Tip: Use `!updatebalance <contract>` to check other token balances"
+            )
+            await message.edit(content=response)
+            logger.info(f"Successfully displayed balance {formatted_balance} for user {ctx.author.id}")
         else:
-            await message.edit(content="❌ Failed to update balance. Please try again later.")
+            await message.edit(content="❌ Failed to fetch current balance. Please try again later.")
 
     except Exception as e:
         logger.error(f"Error in check_balance: {str(e)}")
@@ -794,7 +786,7 @@ async def main():
         logger.info(f"Keep-alive server started on port {keep_alive_port}")
 
         # Initialize supervisor with keep-alive port
-        supervisor = BotSupervisor(keep_alive_port)
+        supervisor = BotSupervisor(keep_alive_port)  # Fix the variable name
         supervisor.setup_signal_handlers()
 
         # Start the bot with proper error handling
