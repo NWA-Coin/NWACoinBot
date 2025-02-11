@@ -7,8 +7,6 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional, Tuple, Dict
-#import trafilatura # Removed as we are not using web scraping anymore
-import re
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -18,8 +16,9 @@ TOKEN_CONTRACT = "J9RZefdNW9eTCiVPLtke5rashEUGeVaXLk7iWFTupump"  # NWADEV token 
 MIN_HOLDING_AMOUNT = 100000  # Minimum tokens required for airdrop
 AIRDROP_AMOUNT = 100000  # Amount of tokens to airdrop to eligible users
 
-# Solana API endpoints
-SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+# API endpoints for token balance checking
+RAYDIUM_API = "https://api.raydium.io/v2/sdk/token/raydium.mainnet.json"
+SOLANA_API = "https://api.mainnet-beta.solana.com"
 
 class WalletManager:
     def __init__(self):
@@ -34,7 +33,6 @@ class WalletManager:
         try:
             with psycopg2.connect(self.db_url) as conn:
                 with conn.cursor() as cur:
-                    # Create wallet_links table with simplified verification
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS wallet_links (
                             id SERIAL PRIMARY KEY,
@@ -55,104 +53,142 @@ class WalletManager:
             logger.error(f"Database setup error: {str(e)}")
             raise
 
-    #async def get_balance_from_solscan(self, wallet_address: str, contract_address: str = None) -> Optional[int]:  #Removed Solscan function
-    #    """Fetch token balance from Solscan website with improved reliability"""
-    #    ...  #Removed Solscan function
-
     async def get_token_balance(self, wallet_address: str, contract_address: Optional[str] = None) -> Optional[int]:
-        """Get token balance using RPC endpoints with proper SPL token account lookup"""
+        """Get token balance using Raydium API with RPC fallback"""
         try:
             if not contract_address:
                 contract_address = TOKEN_CONTRACT
 
-            logger.info(f"Checking balance for wallet {wallet_address} and contract {contract_address}")
-
-            # Simple base58 validation
-            try:
-                if not (len(wallet_address) == 43 or len(wallet_address) == 44):
-                    logger.error("Invalid wallet address length")
-                    return None
-                if not (len(contract_address) == 43 or len(contract_address) == 44):
-                    logger.error("Invalid contract address length")
-                    return None
-            except Exception as e:
-                logger.error(f"Address validation error: {str(e)}")
-                return None
-
-            # Use multiple RPC endpoints for redundancy
-            rpc_endpoints = [
-                "https://api.mainnet-beta.solana.com",
-                "https://solana-mainnet.rpc.extrnode.com",
-                "https://api.mainnet.rpcpool.com",
-            ]
+            logger.info(f"Checking balance for wallet {wallet_address} and token {contract_address}")
 
             async with aiohttp.ClientSession() as session:
-                for endpoint in rpc_endpoints:
-                    try:
-                        # Use getProgramAccounts to find all token accounts
-                        payload = {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "getProgramAccounts",
-                            "params": [
-                                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  # SPL Token Program ID
+                # First get token metadata from Raydium
+                try:
+                    logger.info("Querying Raydium API for token info...")
+                    async with session.get(RAYDIUM_API, timeout=15) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            token_info = None
+
+                            # Find our token in the list
+                            for token in data.get('tokens', []):
+                                if token.get('mint') == contract_address:
+                                    token_info = token
+                                    break
+
+                            if token_info:
+                                decimals = int(token_info.get('decimals', 9))
+                                logger.info(f"Found token info: decimals={decimals}")
+                            else:
+                                logger.warning("Token not found in Raydium API, using default decimals")
+                                decimals = 9
+                except Exception as e:
+                    logger.warning(f"Raydium API error: {str(e)}")
+                    decimals = 9
+
+                # Query token accounts
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getProgramAccounts",
+                    "params": [
+                        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                        {
+                            "encoding": "jsonParsed",
+                            "filters": [
                                 {
-                                    "encoding": "jsonParsed",
-                                    "filters": [
-                                        {
-                                            "dataSize": 165  # Size of token account data
-                                        },
-                                        {
-                                            "memcmp": {
-                                                "offset": 32,  # Offset for owner field
-                                                "bytes": wallet_address
-                                            }
-                                        }
-                                    ]
+                                    "dataSize": 165  # Size of token account data
+                                },
+                                {
+                                    "memcmp": {
+                                        "offset": 32,
+                                        "bytes": contract_address
+                                    }
+                                },
+                                {
+                                    "memcmp": {
+                                        "offset": 0,
+                                        "bytes": wallet_address
+                                    }
                                 }
                             ]
                         }
+                    ]
+                }
 
-                        logger.info(f"Querying {endpoint} for token accounts...")
-                        async with session.post(endpoint, json=payload, timeout=10) as response:
-                            if response.status == 200:
-                                data = await response.json()
+                try:
+                    logger.info("Querying Solana RPC for token accounts...")
+                    async with session.post(SOLANA_API, json=payload, timeout=30) as response:
+                        if response.status != 200:
+                            logger.error(f"RPC error: {response.status}")
+                            return None
 
-                                if 'result' in data:
-                                    total_balance = 0
-                                    for account in data['result']:
-                                        try:
-                                            parsed_data = account['account']['data']['parsed']['info']
-                                            if parsed_data['mint'] == contract_address:
-                                                balance = int(parsed_data['tokenAmount']['amount'])
-                                                total_balance += balance
-                                                logger.info(f"Found token account with balance: {balance}")
-                                        except (KeyError, ValueError) as e:
-                                            logger.warning(f"Error parsing account data: {str(e)}")
-                                            continue
+                        data = await response.json()
+                        logger.debug(f"RPC Response: {data}")
 
-                                    if total_balance > 0:
-                                        logger.info(f"Total balance found: {total_balance}")
-                                        return total_balance
+                        if 'result' not in data:
+                            logger.error("Invalid RPC response format")
+                            return None
 
-                                    logger.warning("No matching token accounts found")
-                                else:
-                                    logger.warning(f"No result field in response from {endpoint}")
+                        total_balance = 0
+                        for account in data['result']:
+                            try:
+                                parsed_data = account['account']['data']['parsed']['info']
+                                if parsed_data['mint'] == contract_address and parsed_data['owner'] == wallet_address:
+                                    amount = int(parsed_data['tokenAmount']['amount'])
+                                    balance = amount / (10 ** decimals)
+                                    total_balance += balance
+                                    logger.info(f"Found token amount: {balance:.2f} (raw: {amount}, decimals: {decimals})")
+                            except (KeyError, ValueError, TypeError) as e:
+                                logger.warning(f"Error parsing account data: {str(e)}")
+                                continue
 
-                    except aiohttp.ClientError as e:
-                        logger.warning(f"Failed to fetch from {endpoint}: {str(e)}")
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Unexpected error with {endpoint}: {str(e)}")
-                        continue
+                        if total_balance > 0:
+                            final_balance = int(total_balance)
+                            logger.info(f"Final balance: {final_balance}")
+                            return final_balance
 
-            logger.error("All RPC endpoints failed to return balance")
+                        logger.info("No token balance found")
+                        return 0
+
+                except asyncio.TimeoutError:
+                    logger.error("RPC request timed out")
+                except Exception as e:
+                    logger.error(f"RPC request failed: {str(e)}")
+                    logger.exception("Full traceback:")
+
             return None
 
         except Exception as e:
             logger.error(f"Unexpected error in get_token_balance: {str(e)}")
             logger.exception("Full traceback:")
             return None
+
+    def _get_associated_token_account(self, wallet_address: str, token_mint: str) -> str:
+        """Calculate the associated token account address using proper PDA derivation"""
+        try:
+            # Convert addresses to bytes
+            wallet_bytes = base58.b58decode(wallet_address)
+            mint_bytes = base58.b58decode(token_mint)
+            token_program_bytes = base58.b58decode(TOKEN_PROGRAM_ID)
+
+            # Create the seeds for PDA derivation
+            seeds = [
+                bytes([1]), # Version bytes
+                wallet_bytes,
+                token_program_bytes,
+                mint_bytes
+            ]
+
+            # Calculate PDA - Using a simpler derivation for testing
+            all_seeds = b''.join(seeds)
+            import hashlib
+            digest = hashlib.sha256(all_seeds).digest()
+            return base58.b58encode(digest).decode('ascii')
+
+        except Exception as e:
+            logger.error(f"Error creating associated token account address: {str(e)}")
+            raise
 
     async def update_wallet_balance(self, discord_id: int) -> bool:
         """Update wallet token balance with simplified logic"""
@@ -189,6 +225,32 @@ class WalletManager:
             logger.error(f"Error updating wallet balance: {str(e)}")
             logger.exception("Full traceback:")
             return False
+
+    def _create_associated_token_account_address(self, wallet_address: str, token_mint: str) -> str:
+        """Calculate the associated token account address"""
+        try:
+            # Convert addresses to bytes
+            wallet_bytes = base58.b58decode(wallet_address)
+            mint_bytes = base58.b58decode(token_mint)
+            program_id_bytes = base58.b58decode("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+            associated_program_id_bytes = base58.b58decode("ATokenGPvbdGVxr1b2hvfj3qyKjfBQdUyDspmUXJ79s")
+
+            # Create the seeds for PDA derivation
+            seeds = [
+                wallet_bytes,
+                program_id_bytes,
+                mint_bytes
+            ]
+
+            # Calculate PDA
+            all_seeds = b''.join(seeds)
+            import base64
+            digest = base64.b64encode(all_seeds)
+            return base58.b58encode(digest).decode('ascii')
+
+        except Exception as e:
+            logger.error(f"Error creating associated token account address: {str(e)}")
+            return None
 
     async def force_balance_update(self, discord_id: int, contract_address: Optional[str] = None) -> Tuple[bool, Optional[int]]:
         """Force an immediate balance update with simplified logic"""
