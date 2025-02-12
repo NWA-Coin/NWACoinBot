@@ -752,7 +752,7 @@ async def roast_nick(ctx):
         message = await ctx.send("🔥 Generating savage NWA roast for virgin Nick White...")
 
         logger.info("Generating roast text...")
-        roast_text = await generate_roast()  # Will now include Nick White specific roasts
+        roast_text = await generate_roast(is_nick_roast=True)  # Pass is_nick_roast=True
 
         logger.info(f"Sending roast: {roast_text}")
         await message.edit(content=roast_text)
@@ -834,28 +834,27 @@ async def main():
             await bot.close()
 
 def ensure_single_instance():
-    """Ensure only one instance of the bot is running"""
+    """Ensure only one instance of the bot runs at a time"""
     try:
-        lockfile = open("/tmp/discord_bot.lock", "w")
-        fcntl.lockf(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lockfile
+        # Try to acquire a file lock
+        lock_file = open(".bot.lock", "w")
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file
     except IOError as e:
-        if e.errno == errno.EAGAIN:
+        if e.errno == errno.EACCES or e.errno == errno.EAGAIN:
             logger.error("Another instance of the bot is already running")
             sys.exit(1)
         raise
 
 if __name__ == "__main__":
+    # Ensure single instance before starting
+    lock_file = ensure_single_instance()
     try:
-        # Ensure single instance
-        lock = ensure_single_instance()
-
-        logger.info("Starting bot main sequence...")
         asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
-    except Exception as e:
-        logger.critical(f"Failed to start bot: {str(e)}")
-        logger.exception("Full traceback:")
     finally:
-        logger.info("Bot shutdown complete")
+        # Release lock when done
+        try:
+            lock_file.close()
+            os.remove(".bot.lock")
+        except:
+            pass

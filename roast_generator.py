@@ -1,9 +1,7 @@
 import os
 import random
-from openai import OpenAI
 import logging
-from price_chart import get_lux_price_history
-import asyncio
+from openai import OpenAI
 
 # Set up logging
 logger = logging.getLogger('discord_bot')
@@ -11,146 +9,106 @@ logger = logging.getLogger('discord_bot')
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# List of fallback roasts
-FALLBACK_ROASTS = [
-    # Technical/Code Roasts
-    "Your shitty code looks like it was written by a drunk monkey! Complete disaster! 🤮💩",
-    "Can't even code a proper rugpull you incompetent f*ck! NWA destroying you! 🔥💀",
-    "Another day of your garbage smart contracts failing! Get rekt trash dev! 🗑️💩",
-    "Stack Overflow won't save your worthless shitcoin! Complete failure! ⚰️👨‍💻",
-    "Error 404: Coding skills not found, just like your liquidity! 📉💀",
-    "Copy-pasting code won't save your worthless token! Another L! 🗑️🤡",
-    "Even a brain-dead monkey codes better! Complete failure! 🐒💩",
-    "Your GitHub is full of stolen garbage! Certified fraud! 💩🖕",
-    "Imagine failing basic syntax you absolute moron! Get exposed! 🤡💻",
-    "Senior dev? More like senior dumbass! Pure trash! 🗑️👨‍💻",
-
-    # Project/Price Roasts
-    "LUX chart looking like your life - straight to the dumpster! 📉🗑️",
-    "NWA destroying your reputation while your mom dumps LUX! 🔥💀",
-    "Even your trading bot dumped this garbage! Get exposed fraud! 🤖🖕",
-    "Begging ChatGPT to pump your worthless token! Pathetic loser! 🤮💸",
-    "Another day, another LUX dump! NWA stays winning you clown! 🤡💩",
-    "Zero liquidity just like your brain cells! Complete disaster! 💸📉",
-    "Imagine launching a token that only goes down! Certified moron! 😂🗑️",
-    "Your token's more dead than your dev career! Get rekt! ⚰️💩",
-    "Chart's dropping faster than your IQ! Complete failure! 📉🤡",
-    "Even LUNA had better tokenomics! Absolute disaster! 💩💸",
-
-    # Mixed Content
-    "Failed code + zero liquidity = complete dumpster fire! 💩📉",
-    "Error in rugpull.py: exit_scam.failed()! Too stupid to scam! 🤖⚰️",
-    "NWA exposing your copy-pasted garbage! Stay getting rekt! 🔥💩",
-    "Can't debug your way out of being trash! Complete failure! 💻🗑️",
-    "Pushed to main and the price crashed again! Certified clown! 🤡💩",
-    "From junior dev to complete laughingstock! Stay losing trash! 🖕👨‍💻",
-    "Commit history: 100% stolen garbage! Pure trash! 💩🤮",
-    "Your code's more useless than SAFEMOON! Complete joke! 🤡💩",
-    "Even BITCONNECT had better devs! Absolute failure! 💩📉",
-    "Bootcamp dropout writing rugpull code! Get exposed! 🗑️👨‍💻"
+# Components for dynamic roast generation
+NICK_TRAITS = [
+    "fat rat",
+    "lazy",
+    "fat boy",
+    "virgin",
+    "failed streamer"
 ]
 
-# Add new fallback roasts specifically targeting Nick White
-NICK_WHITE_ROASTS = [
+NICK_ACTIONS = [
+    "still living in mommy's basement",
+    "can't even code his way out of being fat",
+    "teaching basic while loops",
+    "struggling with for loops",
+    "making tutorial videos nobody watches",
+    "debugging his McDonald's order",
+    "trying to optimize his diet plan",
+    "explaining variables to zero viewers"
+]
+
+NICK_CONSEQUENCES = [
+    "Complete loser",
+    "Total failure", 
+    "Exposed fraud",
+    "Get rekt",
+    "Stay losing",
+    "Pure trash"
+]
+
+NICK_EMOJIS = ["🐀", "🍔", "📺", "💩", "🤡", "💻", "💀", "🤮", "🐷", "👶", "⌨️", "🧦"]
+
+# Fallback roasts for error cases
+FALLBACK_ROASTS = [
     "Fat rat Nick White still living in mommy's basement! Complete loser! 🐀💩",
     "Nick White so lazy he can't even code his way out of being fat! 🍔🤮",
     "Yo fat boy Nick, did your mom buy those XXXL programming socks? 🧦🐷",
-    "Nick White's viewcount lower than his IQ! Failed streamer confirmed! 📉🗑️",
-    "Even ChatGPT writes better code than this fat rat Nick White! 🐀💩",
+    "Nick White's viewcount lower than his IQ! Failed streamer confirmed! 📺🗑️",
     "Nick White's Twitch career more dead than his diet plans! 🍕💀",
     "Lazy ass Nick White can't even debug his eating habits! Get rekt! 🍔🤡",
     "Nick the rat got exposed! Back to making basic loop tutorials! 🐀👶",
-    "Imagine being a fat virgin teaching 'while loops'! Complete L! 🤡💩",
-    "Nick White so lazy he outsources his coding to ChatGPT! Exposed! 🤖🗑️",
-    "Failed streamer Nick White got less viewers than brain cells! 📺💀",
-    "This fat rat can't even optimize his own lifestyle! Complete joke! 🐀🤮",
-    "Yo Nick, McDonald's called - they miss their best customer! 🍔🐷",
-    "Nick White's streams more dead than his workout routine! 🏃‍♂️💀",
-    "Even LUNA had better engagement than Nick's dead channel! 📉🤡"
+    "Fat boy's keyboard greasier than his code quality! 🍔⌨️"
 ]
 
-async def get_crash_stats():
-    """Get crash stats for roast."""
+def generate_dynamic_roast():
+    """Generate a dynamic roast using OpenAI"""
     try:
-        timestamps, prices = await get_lux_price_history()  # Updated to unpack two values
-        if prices:
-            entry_price = 0.015  # NWA entry price
-            current_price = prices[-1]
-            crash_percent = ((entry_price - current_price) / entry_price) * 100
-            price_in_cents = current_price * 100
-            logger.info(f"Calculated crash stats: {crash_percent:.1f}% down, price: {price_in_cents:.4f}¢")
-            return crash_percent, price_in_cents
-        return None, None
-    except Exception as e:
-        logger.error(f"Error getting crash stats: {str(e)}")
-        return None, None
+        # Create a prompt that focuses on Nick's traits
+        prompt = """Generate a brutal, savage roast about Nick White with these traits:
+        - Being fat and lazy
+        - Failed streaming career (no viewers)
+        - Living in his mom's basement
+        - Teaching basic programming concepts
 
-async def generate_roast():
-    """Generate a savage roast focusing on technical and project failures."""
+        Rules:
+        - Keep it under 100 characters
+        - Include 2 emojis from: 🐀🍔📺💩🤡💻💀🤮🐷👶⌨️
+        - Focus only on personal traits
+        - Make it unique and devastating
+        - NO mentions of cryptocurrency or coding quality
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Generate a savage roast about Nick White!"}
+            ],
+            max_tokens=60,
+            temperature=0.9
+        )
+
+        roast = response.choices[0].message.content.strip()
+        logger.info(f"Generated OpenAI roast: {roast}")
+        return roast
+
+    except Exception as e:
+        logger.error(f"Error generating dynamic roast: {str(e)}")
+        return None
+
+async def generate_roast(is_nick_roast=False):
+    """Generate a savage roast focusing on Nick White's traits"""
     try:
         logger.info("Starting roast generation")
 
-        # Get crash stats
-        try:
-            crash_percent, price_in_cents = await get_crash_stats()
-        except Exception as e:
-            logger.error(f"Error getting crash stats: {str(e)}")
-            crash_percent, price_in_cents = None, None
+        if is_nick_roast:
+            # Try to generate a dynamic roast first
+            roast = generate_dynamic_roast()
+            if roast:
+                logger.info(f"Generated dynamic roast: {roast}")
+                return roast
 
-        # Generate roast based on crash stats
-        try:
-            logger.info(f"Generating roast with stats: {crash_percent:.1f}% down, {price_in_cents:.4f}¢")
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""You are an extremely savage and vulgar roast generator for the Nick White Army (NWA).
-                        Create brutal, vulgar roasts mixing insults about Nick White and the LUX cryptocurrency.
-                        Current stats: Down {crash_percent:.1f}%, price: {price_in_cents:.4f}¢
-
-                        Mix these brutal roasting styles:
-                        1. Nick White Personal Roasts:
-                           - Mock his virgin status and living situation
-                           - Roast his basic programming tutorials
-                           - Make fun of his nonexistent social life
-                           - Blast his failed YouTube career
-                        2. Technical Roasts:
-                           - Mock their incompetent coding and development disasters
-                           - Roast their broken smart contracts and failed deployments
-                           - Make fun of their copy-pasted code and amateur mistakes
-                        3. Price/Project Roasts:
-                           - Mock their constant price dumps and zero liquidity
-                           - Roast their failed tokenomics and contract bugs
-
-                        Guidelines:
-                        - Keep roasts under 100 characters
-                        - Include emojis (💩,🤡,💻,⚰️,📉,🔥,🖕,🤮)
-                        - Be extremely vulgar and brutal
-                        - Focus on Nick's virgin status and technical failures
-                        - Make each roast unique and devastating"""
-                    },
-                    {
-                        "role": "user",
-                        "content": "Generate the most savage, vulgar NWA roast about Nick White and LUX's disasters!"
-                    }
-                ],
-                max_tokens=50,
-                temperature=0.9
-            )
-
-            roast = response.choices[0].message.content.strip()
-            logger.info(f"Generated OpenAI roast: {roast}")
-            return roast
-
-        except Exception as e:
-            logger.error(f"Error generating roast with OpenAI: {str(e)}")
-            # Use Nick White specific fallback roasts
-            fallback = random.choice(FALLBACK_ROASTS + NICK_WHITE_ROASTS)
+            # Fallback to pre-written roasts if dynamic generation fails
+            fallback = random.choice(FALLBACK_ROASTS)
             logger.info(f"Using fallback roast: {fallback}")
             return fallback
+        else:
+            # For non-Nick roasts, return a generic technical roast
+            return "Your code looks like it was written by a drunk monkey! Complete disaster! 🤮💩"
 
     except Exception as e:
         logger.error(f"Error in roast generation: {str(e)}")
         logger.exception("Full traceback:")
-        return random.choice(FALLBACK_ROASTS + NICK_WHITE_ROASTS)
+        return random.choice(FALLBACK_ROASTS)

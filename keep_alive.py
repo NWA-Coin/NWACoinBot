@@ -21,7 +21,7 @@ def home():
     logger.info("Received request to keep-alive endpoint")
     return "Bot is alive!"
 
-def verify_server():
+def verify_server(port):
     """Test if server is responding"""
     logger.info("Starting server verification...")
     time.sleep(2)  # Wait for server to start
@@ -29,16 +29,16 @@ def verify_server():
     try:
         # First check if port is actually in use
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex(('0.0.0.0', 3000))
+        result = sock.connect_ex(('0.0.0.0', port))
         sock.close()
 
         if result != 0:
-            logger.error("Port 3000 is not in use!")
+            logger.error(f"Port {port} is not in use!")
             return False
 
-        logger.info("Port 3000 is in use, testing HTTP response...")
+        logger.info(f"Port {port} is in use, testing HTTP response...")
         try:
-            response = requests.get('http://0.0.0.0:3000/', timeout=5)
+            response = requests.get(f'http://0.0.0.0:{port}/', timeout=5)
             logger.info(f"Server test response: {response.status_code}")
             return response.status_code == 200
         except requests.RequestException as e:
@@ -51,10 +51,16 @@ def verify_server():
 def keep_alive():
     """Start the keep-alive server and return the port"""
     try:
-        logger.info("Starting keep-alive server on port 3000...")
+        # Get port from environment variable, default to 3000 if not set
+        # Railway will automatically set PORT environment variable
+        port = int(os.environ.get('PORT', 3000))
+        logger.info(f"Starting keep-alive server on port {port}...")
 
         def run_flask():
-            app.run(host='0.0.0.0', port=3000, debug=False, use_reloader=False)
+            # Disable Flask's default logging to avoid noise
+            import logging
+            logging.getLogger('werkzeug').setLevel(logging.ERROR)
+            app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
         # Start Flask in a daemon thread
         server = Thread(target=run_flask)
@@ -62,9 +68,9 @@ def keep_alive():
         server.start()
 
         # Verify server started properly
-        if verify_server():
-            logger.info("Keep-alive server started successfully on port 3000")
-            return 3000
+        if verify_server(port):
+            logger.info(f"Keep-alive server started successfully on port {port}")
+            return port
         else:
             logger.error("Failed to verify keep-alive server")
             return None
