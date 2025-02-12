@@ -10,15 +10,21 @@ from psycopg2.extras import RealDictCursor
 import backoff
 from typing import Optional, Dict, Any
 
-# Update logging config for better Railway deployment visibility
+# Update the logging configuration to be more verbose for Railway deployment
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
     ]
 )
 logger = logging.getLogger('discord_bot')
+
+# Add Railway deployment status logging
+logger.info("Starting LUX Roast Bot - Railway Deployment")
+logger.info("Python version: %s", sys.version)
+logger.info("Discord.py version: %s", discord.__version__)
 
 # Validate required environment variables
 required_env_vars = ['DISCORD_TOKEN', 'DATABASE_URL']
@@ -41,9 +47,6 @@ import base58
 import random
 from datetime import datetime
 
-logger.info("Starting LUX Roast Bot - Railway Deployment")
-logger.info("Python version: %s", sys.version)
-logger.info("Discord.py version: %s", discord.__version__)
 
 # Bot setup with reconnect enabled and improved error handling
 intents = discord.Intents.default()
@@ -821,25 +824,9 @@ async def main():
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
-        logger.error(f"Fatal error in main: {str(e)}")
+        logger.critical(f"Critical error in main loop: {str(e)}")
         logger.exception("Full traceback:")
         sys.exit(1)
-    finally:
-        if not bot.is_closed():
-            await bot.close()
-            logger.info("Bot connection closed")
 
 if __name__ == "__main__":
-    try:
-        # Test database connection before starting bot
-        logger.info("Testing database connection...")
-        conn = get_database_connection()
-        conn.close()
-        logger.info("Database connection test successful")
-
-        # Start the bot
-        asyncio.run(main())
-    except Exception as e:
-        logger.critical(f"Failed to start bot: {str(e)}")
-        logger.exception("Full startup traceback:")
-        sys.exit(1)
+    asyncio.run(main())
