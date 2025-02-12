@@ -714,6 +714,7 @@ async def help_command(ctx):
 🔥 **NWA Bot Commands** 🔥
 • `!ping` - Check if bot is active
 • `!roast` - Get a savage roast about LUX
+• `!roastnick` - Roast the virgin loser Nick White
 • `!meme [token] [timeframe]` - Generate a price chart meme
   - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
@@ -736,6 +737,31 @@ async def help_command(ctx):
     """
     await ctx.send(help_text)
 
+# Add new roast Nick command
+@bot.command(name='roastnick')
+@commands.cooldown(1, 3, commands.BucketType.user)  # Rate limit: 1 use per 3 seconds per user
+async def roast_nick(ctx):
+    """Generate a savage roast specifically about Nick White"""
+    logger.info(f'Executing roast_nick command for {ctx.author}')
+    try:
+        await bot.change_presence(
+            activity=discord.Game(name="!help | Roasting Nick White"),
+            status=discord.Status.online
+        )
+        logger.info("Sending initial response...")
+        message = await ctx.send("🔥 Generating savage NWA roast for virgin Nick White...")
+
+        logger.info("Generating roast text...")
+        roast_text = await generate_roast()  # Will now include Nick White specific roasts
+
+        logger.info(f"Sending roast: {roast_text}")
+        await message.edit(content=roast_text)
+        logger.info("Successfully sent roast")
+    except Exception as e:
+        logger.error(f"Error in roast_nick command: {str(e)}")
+        logger.exception("Full traceback:")
+        await ctx.send("Failed to roast Nick! But he's still a virgin! 💀")
+
 def format_price_label(price):
     """Format price in cents"""
     price_in_cents = price * 100
@@ -743,7 +769,7 @@ def format_price_label(price):
 
 # Enhanced shutdown handling
 def cleanup():
-    """Cleanup function to handle graceful shutdown"""
+    """Cleanup function"""
     logger.info("Bot cleanup initiated")
     try:
         if not bot.is_closed():

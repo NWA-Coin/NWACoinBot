@@ -50,6 +50,20 @@ FALLBACK_ROASTS = [
     "Bootcamp dropout writing rugpull code! Get exposed! 🗑️👨‍💻"
 ]
 
+# Add new fallback roasts specifically targeting Nick White
+NICK_WHITE_ROASTS = [
+    "Virgin Nick White still living in mommy's basement! Complete loser! 🤡💩",
+    "Yo Nick White, did your mom buy you those programming socks? Pathetic virgin! 🧦🤮",
+    "Nick White the type to practice leetcode while his girl's out with Chad! Oh wait... 🤡💀",
+    "Even ChatGPT writes better code than Nick White! Certified clown! 🤖🗑️",
+    "Nick White's YouTube career is more dead than his social life! 📉💩",
+    "Imagine being a 30-year-old virgin teaching basic loops! Get rekt Nick! 👶🤡",
+    "Nick White's code reviews take longer than his dating history! Complete L! 💀🖕",
+    "Hey Nick, your mom called - she wants her basement back! 🏠🤮",
+    "Nick White the type to debug his social skills and still fail! 🐛💩",
+    "Even LUNA had better documentation than Nick's dating profile! 📝🤡"
+]
+
 async def get_crash_stats():
     """Get crash stats for roast."""
     try:
@@ -87,35 +101,33 @@ async def generate_roast():
                     {
                         "role": "system",
                         "content": f"""You are an extremely savage and vulgar roast generator for the Nick White Army (NWA).
-                        Create brutal, vulgar roasts about LUX cryptocurrency focusing on their complete failures.
+                        Create brutal, vulgar roasts mixing insults about Nick White and the LUX cryptocurrency.
                         Current stats: Down {crash_percent:.1f}%, price: {price_in_cents:.4f}¢
 
                         Mix these brutal roasting styles:
-                        1. Technical Roasts:
+                        1. Nick White Personal Roasts:
+                           - Mock his virgin status and living situation
+                           - Roast his basic programming tutorials
+                           - Make fun of his nonexistent social life
+                           - Blast his failed YouTube career
+                        2. Technical Roasts:
                            - Mock their incompetent coding and development disasters
                            - Roast their broken smart contracts and failed deployments
                            - Make fun of their copy-pasted code and amateur mistakes
-                           - Blast their failed code reviews and buggy commits
-                        2. Price/Project Roasts:
+                        3. Price/Project Roasts:
                            - Mock their constant price dumps and zero liquidity
                            - Roast their failed tokenomics and contract bugs
-                           - Make fun of their nonexistent documentation
-                           - Blast their broken features and failed launches
-                        3. Developer Roasts:
-                           - Savage programming jokes about their incompetence
-                           - Brutal technical puns about their failures
-                           - Vulgar mockery of their development disasters
 
                         Guidelines:
                         - Keep roasts under 100 characters
                         - Include emojis (💩,🤡,💻,⚰️,📉,🔥,🖕,🤮)
                         - Be extremely vulgar and brutal
-                        - Focus on complete technical and project failures
+                        - Focus on Nick's virgin status and technical failures
                         - Make each roast unique and devastating"""
                     },
                     {
                         "role": "user",
-                        "content": "Generate the most savage, vulgar NWA roast about LUX's technical disasters!"
+                        "content": "Generate the most savage, vulgar NWA roast about Nick White and LUX's disasters!"
                     }
                 ],
                 max_tokens=50,
@@ -128,11 +140,12 @@ async def generate_roast():
 
         except Exception as e:
             logger.error(f"Error generating roast with OpenAI: {str(e)}")
-            fallback = random.choice(FALLBACK_ROASTS)
+            # Use Nick White specific fallback roasts
+            fallback = random.choice(FALLBACK_ROASTS + NICK_WHITE_ROASTS)
             logger.info(f"Using fallback roast: {fallback}")
             return fallback
 
     except Exception as e:
         logger.error(f"Error in roast generation: {str(e)}")
         logger.exception("Full traceback:")
-        return random.choice(FALLBACK_ROASTS)
+        return random.choice(FALLBACK_ROASTS + NICK_WHITE_ROASTS)
