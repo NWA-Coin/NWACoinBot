@@ -2,6 +2,7 @@ import logging
 import time
 from flask import Flask
 import requests
+import os
 
 # Set up logging
 logging.basicConfig(
@@ -20,9 +21,10 @@ def home():
 
 def verify_server():
     """Test if server is responding"""
+    port = int(os.environ.get('PORT', 5000))  # Use Railway's PORT env var
     time.sleep(2)  # Wait for server to start
     try:
-        response = requests.get('http://0.0.0.0:5000')
+        response = requests.get(f'http://0.0.0.0:{port}')
         logger.info(f"Server test response: {response.status_code}")
         return response.status_code == 200
     except Exception as e:
@@ -31,11 +33,13 @@ def verify_server():
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting test server on port 5000...")
+        # Get port from environment variable (Railway sets this)
+        port = int(os.environ.get('PORT', 5000))
+        logger.info(f"Starting test server on port {port}...")
 
         # Run server in a thread so we can verify it
         from threading import Thread
-        server = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False))
+        server = Thread(target=lambda: app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False))
         server.daemon = True
         server.start()
 

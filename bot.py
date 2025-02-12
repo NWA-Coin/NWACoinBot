@@ -4,15 +4,14 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 import sys
+import signal
 from datetime import datetime
 import asyncio
-import signal
-from keep_alive import keep_alive
+from supervisor import BotSupervisor
 from roast_generator import generate_roast
 from meme_generator import generate_meme
 from price_chart import get_lux_price_history, format_price_label
 from market_data import get_solana_token_by_contract
-from supervisor import BotSupervisor
 from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT
 import fcntl
 import errno
@@ -20,7 +19,7 @@ from giveaway_manager import GiveawayManager
 import random
 import base58
 
-# Update the logging configuration at the top of bot.py
+# Update logging config
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -31,11 +30,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger('discord_bot')
 
-# Load environment variables
-load_dotenv()
+# Load environment variables with better error handling
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
-    logger.error("No Discord token found!")
+    logger.error("DISCORD_TOKEN not found in environment variables!")
     sys.exit(1)
 
 # Bot setup
@@ -51,11 +49,12 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
-# Remove default help command
-bot.remove_command('help')
-
+# Initialize these as None - they'll be set up in on_ready
 wallet_manager = None
 giveaway_manager = None
+
+# Remove default help command before registering our custom one
+bot.remove_command('help')
 
 @bot.event
 async def on_ready():
@@ -763,7 +762,7 @@ async def roast_nick(ctx):
         await ctx.send("Failed to roast Nick! But he's still a virgin! 💀")
 
 def format_price_label(price):
-    """Format price in cents"""
+    """Format price incents"""
     price_in_cents = price * 100
     return f"{price_in_cents:.2f}¢"
 
@@ -802,18 +801,17 @@ signal.signal(signal.SIGINT, signal_handler)
 async def main():
     """Main async entry point with enhanced error handling"""
     try:
-        # Start keep-alive server
-        logger.info("Starting keep-alive server...")
-        keep_alive_port = keep_alive()
-        if not keep_alive_port:
-            logger.error("Failed to start keep-alive server")
-            return
+        # Initialize supervisor
+        supervisor = BotSupervisor()
 
-        logger.info(f"Keep-alive server started on port {keep_alive_port}")
+        # Set up signal handlers for graceful shutdown
+        def handle_signal(sig, frame):
+            logger.info(f"Received signal {sig}")
+            supervisor.stop()
+            sys.exit(0)
 
-        # Initialize supervisor with keep-alive port
-        supervisor = BotSupervisor(keep_alive_port)  # Fix the variable name
-        supervisor.setup_signal_handlers()
+        signal.signal(signal.SIGTERM, handle_signal)
+        signal.signal(signal.SIGINT, handle_signal)
 
         # Start the bot with proper error handling
         async with bot:
@@ -825,13 +823,12 @@ async def main():
                 await bot.start(TOKEN)
             except Exception as e:
                 logger.error(f"Failed to start bot: {str(e)}")
-                monitor_task.cancel()
-                raise
+                sys.exit(1)
+
     except Exception as e:
-        logger.critical(f"Critical error in main: {str(e)}")
+        logger.error(f"Error in main: {str(e)}")
         logger.exception("Full traceback:")
-        if not bot.is_closed():
-            await bot.close()
+        sys.exit(1)
 
 def ensure_single_instance():
     """Ensure only one instance of the bot runs at a time"""
@@ -851,10 +848,9 @@ if __name__ == "__main__":
     lock_file = ensure_single_instance()
     try:
         asyncio.run(main())
-    finally:
-        # Release lock when done
-        try:
-            lock_file.close()
-            os.remove(".bot.lock")
-        except:
-            pass
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+        logger.exception("Full traceback:")
+        sys.exit(1)

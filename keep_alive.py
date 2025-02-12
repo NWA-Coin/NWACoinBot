@@ -23,7 +23,7 @@ def home():
 
 def verify_server(port):
     """Test if server is responding"""
-    logger.info("Starting server verification...")
+    logger.info(f"Starting server verification on port {port}...")
     time.sleep(2)  # Wait for server to start
 
     try:
@@ -38,9 +38,26 @@ def verify_server(port):
 
         logger.info(f"Port {port} is in use, testing HTTP response...")
         try:
-            response = requests.get(f'http://0.0.0.0:{port}/', timeout=5)
-            logger.info(f"Server test response: {response.status_code}")
-            return response.status_code == 200
+            # Test both localhost and 0.0.0.0
+            urls = [
+                f'http://0.0.0.0:{port}/',
+                f'http://127.0.0.1:{port}/',
+                f'http://localhost:{port}/'
+            ]
+
+            for url in urls:
+                try:
+                    logger.info(f"Testing URL: {url}")
+                    response = requests.get(url, timeout=5)
+                    logger.info(f"Server test response for {url}: {response.status_code}")
+                    if response.status_code == 200:
+                        return True
+                except requests.RequestException as e:
+                    logger.warning(f"Failed to connect to {url}: {str(e)}")
+                    continue
+
+            logger.error("All connection attempts failed")
+            return False
         except requests.RequestException as e:
             logger.error(f"HTTP request failed: {str(e)}")
             return False
@@ -60,12 +77,14 @@ def keep_alive():
             # Disable Flask's default logging to avoid noise
             import logging
             logging.getLogger('werkzeug').setLevel(logging.ERROR)
+            # Use 0.0.0.0 to make the server externally visible
             app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
         # Start Flask in a daemon thread
         server = Thread(target=run_flask)
         server.daemon = True
         server.start()
+        logger.info(f"Flask server thread started for port {port}")
 
         # Verify server started properly
         if verify_server(port):
