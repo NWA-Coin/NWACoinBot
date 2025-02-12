@@ -19,10 +19,10 @@ from giveaway_manager import GiveawayManager
 import random
 import base58
 
-# Update logging config
+# Update logging config for better visibility in Railway logs
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - [%(levelname)s] %(name)s: %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
         logging.FileHandler('bot.log')
@@ -33,8 +33,12 @@ logger = logging.getLogger('discord_bot')
 # Load environment variables with better error handling
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
-    logger.error("DISCORD_TOKEN not found in environment variables!")
+    logger.critical("DISCORD_TOKEN not found in environment variables! Bot cannot start.")
     sys.exit(1)
+
+logger.info("Starting LUX Roast Bot - Railway Deployment")
+logger.info("Python version: %s", sys.version)
+logger.info("Discord.py version: %s", discord.__version__)
 
 # Bot setup
 intents = discord.Intents.default()
@@ -776,7 +780,7 @@ def cleanup():
             asyncio.create_task(bot.close())
         logger.info("Cleanup complete")
     except Exception as e:
-        logger.error(f"Error during cleanup: {str(e)}")
+            logger.error(f"Error during cleanup: {str(e)}")
 
 async def shutdown(bot):
     """Async shutdown handler"""
