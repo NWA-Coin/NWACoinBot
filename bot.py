@@ -10,22 +10,25 @@ from psycopg2.extras import RealDictCursor
 import backoff
 from typing import Optional, Dict, Any
 
-# Update logging config for better visibility in Railway logs
+# Update logging config for better Railway deployment visibility
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log')
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger('discord_bot')
 
-# Load environment variables
-TOKEN = os.getenv('DISCORD_TOKEN')
-if not TOKEN:
-    logger.critical("DISCORD_TOKEN not found in environment variables! Bot cannot start.")
+# Validate required environment variables
+required_env_vars = ['DISCORD_TOKEN', 'DATABASE_URL']
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logger.critical(f"Missing required environment variables: {', '.join(missing_vars)}")
     sys.exit(1)
+
+TOKEN = os.getenv('DISCORD_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Rest of the imports
 from roast_generator import generate_roast
@@ -61,22 +64,24 @@ giveaway_manager: Optional[GiveawayManager] = None
 
 bot.remove_command('help')
 
-# Add exponential backoff retry for database operations
-@backoff.on_exception(backoff.expo, psycopg2.Error, max_tries=5)
+# Update database connection with more robust error handling
+@backoff.on_exception(
+    backoff.expo,
+    (psycopg2.OperationalError, psycopg2.InterfaceError),
+    max_tries=5,
+    max_time=30
+)
 def get_database_connection():
-    """Get a database connection with retry logic"""
+    """Get a database connection with improved retry logic"""
     try:
-        if not os.environ.get('DATABASE_URL'):
-            raise ValueError("DATABASE_URL environment variable is not set")
-
         conn = psycopg2.connect(
-            os.environ['DATABASE_URL'],
+            DATABASE_URL,
             cursor_factory=RealDictCursor
         )
         conn.autocommit = True
         return conn
     except Exception as e:
-        logger.error(f"Failed to connect to database: {str(e)}")
+        logger.error(f"Database connection error: {str(e)}")
         raise
 
 # Update wallet manager initialization
@@ -764,7 +769,7 @@ async def help_command(ctx):
 • `!unlinkwallet` - Unlink your wallet from Discord
 • `!balance` - Check your NWA token balance
 • `!updatebalance [contract]` - Force update balance (optional: specify token contract)
-• `!airdrop` - Check eligibility and claim airdrop
+• ``!airdrop` - Check eligibility and claim airdrop
 
 🎉 **Giveaway Commands** 🎉
 • `!join` - Join the active giveaway (requires 100k NWA tokens)
@@ -808,15 +813,17 @@ def format_price_label(price):
         return "0.00¢"  # Safe fallback
 
 async def main():
-    """Main entry point with simplified error handling"""
+    """Main entry point with improved error handling for Railway deployment"""
     try:
+        logger.info("Starting bot on Railway deployment...")
         async with bot:
             await bot.start(TOKEN)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
+        logger.error(f"Fatal error in main: {str(e)}")
         logger.exception("Full traceback:")
+        sys.exit(1)
     finally:
         if not bot.is_closed():
             await bot.close()
@@ -824,8 +831,15 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        # Test database connection before starting bot
+        logger.info("Testing database connection...")
+        conn = get_database_connection()
+        conn.close()
+        logger.info("Database connection test successful")
+
+        # Start the bot
         asyncio.run(main())
     except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        logger.exception("Full traceback:")
+        logger.critical(f"Failed to start bot: {str(e)}")
+        logger.exception("Full startup traceback:")
         sys.exit(1)
