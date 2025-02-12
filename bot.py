@@ -1,6 +1,6 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import logging
 import sys
@@ -9,6 +9,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import backoff
 from typing import Optional, Dict, Any
+import asyncio
+from datetime import datetime, timezone
 
 # Update the logging configuration to be more verbose for Railway deployment
 logging.basicConfig(
@@ -46,7 +48,65 @@ from giveaway_manager import GiveawayManager
 import base58
 import random
 from datetime import datetime
+# Health monitoring
+last_heartbeat = datetime.now(timezone.utc)
 
+# Define health check task before bot events
+@tasks.loop(minutes=5)
+async def health_check():
+    """Monitor bot health and connection status"""
+    global last_heartbeat
+    try:
+        # Update heartbeat
+        last_heartbeat = datetime.now(timezone.utc)
+        logger.info(f"Health check passed at {last_heartbeat.isoformat()}")
+
+        # Verify Discord connection
+        if not bot.is_ready():
+            logger.warning("Bot disconnected, attempting to reconnect...")
+            try:
+                # Close existing connection if any
+                try:
+                    await bot.close()
+                except Exception as e:
+                    logger.warning(f"Error closing existing connection: {e}")
+
+                # Attempt to reconnect
+                await bot.start(TOKEN)
+                logger.info("Successfully reconnected to Discord")
+            except Exception as e:
+                logger.error(f"Failed to reconnect: {str(e)}")
+                # Implement exponential backoff for reconnection
+                await asyncio.sleep(300)  # Wait 5 minutes before next attempt
+                return
+
+        # Check database connection
+        try:
+            conn = get_database_connection()
+            with conn.cursor() as cur:
+                # Simple query to verify connection is working
+                cur.execute("SELECT 1")
+            conn.close()
+            logger.info("Database connection verified")
+        except Exception as e:
+            logger.error(f"Database connection failed: {str(e)}")
+            # Alert about database connection failure
+            if bot.is_ready():
+                try:
+                    owner = await bot.fetch_user(bot.owner_id)
+                    await owner.send(f"⚠️ Database connection error: {str(e)}")
+                except Exception as dm_error:
+                    logger.error(f"Failed to notify owner: {str(dm_error)}")
+
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        logger.exception("Full health check error:")
+
+@health_check.before_loop
+async def before_health_check():
+    """Wait for the bot to be ready before starting health checks"""
+    await bot.wait_until_ready()
+    logger.info("Health check system initialized")
 
 # Bot setup with reconnect enabled and improved error handling
 intents = discord.Intents.default()
@@ -120,6 +180,11 @@ async def on_ready():
         activity=discord.Game(name="!help | Roasting Crypto"),
         status=discord.Status.online
     )
+
+    # Start health check if not already running
+    if not health_check.is_running():
+        health_check.start()
+        logger.info("Health check system started")
 
 @bot.event
 async def on_resumed():
@@ -712,7 +777,7 @@ async def join_giveaway(ctx):
             return
 
         if not balance or balance < giveaway_manager.min_tokens_required:
-            await ctx.send(f"❌ You need at least {giveaway_manager.min_tokens_required:,} NWA tokens to join the giveaway!")
+            await ctx.send(f"❌ You need at least {giveawaymanager.min_tokens_required:,} NWA tokens to join the giveaway!")
             return
 
         if giveaway_manager.add_participant(ctx.author.id):
@@ -773,13 +838,12 @@ async def help_command(ctx):
   - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
-• `!takeover` - Show LUX chart with NWA takeover line🏦 **NWA Wallet Commands** 🏦
+• `!takeover` - Show LUX chart with NWA takeover line
+🏦 **NWA Wallet Commands** 🏦
 • `!linkwallet <address>` - Link your NWA wallet
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
-• `!unlinkwallet` - Unlink your wallet from Discord
-• `!balance` - Check your NWA token balance
-• `!updatebalance [contract]` - Force update balance (optional: specify token contract)
+• ``!updatebalance [contract]` - Force update balance (optional: specify token contract)
 • ``!airdrop` - Check eligibility and claim airdrop
 
 🎉 **Giveaway Commands** 🎉

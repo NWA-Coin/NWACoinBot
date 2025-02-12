@@ -57,3 +57,7 @@ temp_chart.png
 
 # Railway specific
 .railway/
+
+# Replit specific (we don't need these anymore)
+.replit
+replit.nix

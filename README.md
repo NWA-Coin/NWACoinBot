@@ -4,11 +4,10 @@ DATABASE_URL=your_postgresql_url
 COINGECKO_API_KEY=your_coingecko_api_key
 ```
 
-## Local Development
+## Development Setup
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-npm install
 
-# Run bot
+# Run bot locally
 python bot.py

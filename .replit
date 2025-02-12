@@ -69,7 +69,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python bot.py"
+args = "python3 bot.py"
 
 [deployment]
 run = ["sh", "-c", "python python_repl.py"]
