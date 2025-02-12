@@ -4,11 +4,11 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 import sys
-import signal
 import asyncio
-from supervisor import BotSupervisor
-import psutil # Added import for process management
-import gc # Added import for garbage collection
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import backoff
+from typing import Optional, Dict, Any
 
 # Update logging config for better visibility in Railway logs
 logging.basicConfig(
@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger('discord_bot')
 
-# Load environment variables with better error handling
+# Load environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     logger.critical("DISCORD_TOKEN not found in environment variables! Bot cannot start.")
@@ -42,7 +42,7 @@ logger.info("Starting LUX Roast Bot - Railway Deployment")
 logger.info("Python version: %s", sys.version)
 logger.info("Discord.py version: %s", discord.__version__)
 
-# Bot setup
+# Bot setup with reconnect enabled and improved error handling
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -55,18 +55,42 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
-# Initialize these as None - they'll be set up in on_ready
-wallet_manager = None
-giveaway_manager = None
+# Update manager types
+wallet_manager: Optional[WalletManager] = None
+giveaway_manager: Optional[GiveawayManager] = None
 
-# Remove default help command before registering our custom one
 bot.remove_command('help')
 
+# Add exponential backoff retry for database operations
+@backoff.on_exception(backoff.expo, psycopg2.Error, max_tries=5)
+def get_database_connection():
+    """Get a database connection with retry logic"""
+    try:
+        if not os.environ.get('DATABASE_URL'):
+            raise ValueError("DATABASE_URL environment variable is not set")
+
+        conn = psycopg2.connect(
+            os.environ['DATABASE_URL'],
+            cursor_factory=RealDictCursor
+        )
+        conn.autocommit = True
+        return conn
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {str(e)}")
+        raise
+
+# Update wallet manager initialization
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects"""
     global wallet_manager, giveaway_manager
     try:
+        # Test database connection first
+        logger.info("Testing database connection...")
+        conn = get_database_connection()
+        conn.close()
+        logger.info("Database connection test successful")
+
         logger.info("Initializing wallet manager...")
         wallet_manager = WalletManager()
         logger.info("Wallet manager initialized successfully")
@@ -77,7 +101,8 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Failed to initialize managers: {str(e)}")
         logger.exception("Full traceback:")
-        return
+        # Don't raise the exception - let the bot continue without the managers
+        # They will be retried on next connection
 
     logger.info(f'Logged in as {bot.user.name} ($NWADEV)')
     logger.info(f'Bot ID: {bot.user.id}')
@@ -99,8 +124,12 @@ async def on_resumed():
 
 @bot.event
 async def on_disconnect():
-    """Log disconnection"""
+    """Log disconnection and attempt graceful cleanup"""
     logger.warning("Bot disconnected. Attempting to reconnect...")
+    if wallet_manager:
+        logger.info("Cleaning up wallet manager resources...")
+    if giveaway_manager:
+        logger.info("Cleaning up giveaway manager resources...")
 
 @bot.event
 async def on_message(message):
@@ -463,29 +492,31 @@ async def verify_wallet(ctx, verification_code: str = None):
 async def list_wallet(ctx):
     """Show your linked NWA wallet"""
     if not wallet_manager:
-        await ctx.send("❌ Wallet system is currently unavailable")
+        await ctx.send("❌ Wallet system is currently unavailable. Please try again later.")
         return
 
     try:
         wallet = await wallet_manager.get_user_wallet(ctx.author.id)
-
         if not wallet:
             await ctx.send("🏦 You don't have a verified NWA wallet linked. Use !linkwallet to link one!")
             return
 
-        # Create a formatted wallet display
-        status = "✅ Airdrop Claimed" if wallet['airdrop_claimed'] else "⏳ Airdrop Pending"
+        # Create a formatted wallet display with safe access
+        status = "✅ Airdrop Claimed" if wallet.get('airdrop_claimed') else "⏳ Airdrop Pending"
+        created_at = wallet.get('created_at', datetime.now())
+        wallet_address = wallet.get('wallet_address', 'Unknown')
+
         wallet_info = (
             f"🏦 Your NWA Wallet:\n"
-            f"Address: `{wallet['wallet_address']}`\n"
-            f"Linked: <t:{int(wallet['created_at'].timestamp())}:R>\n"
+            f"Address: `{wallet_address}`\n"
+            f"Linked: <t:{int(created_at.timestamp())}:R>\n"
             f"Status: {status}"
         )
 
         await ctx.send(wallet_info)
     except Exception as e:
         logger.error(f"Error in list_wallet command: {str(e)}")
-        await ctx.send("❌ Failed to retrieve wallet info")
+        await ctx.send("❌ Failed to retrieve wallet info. Please try again later.")
 
 @bot.command(name='unlinkwallet')
 @commands.cooldown(1, 30, commands.BucketType.user)  # Rate limit: 1 use per 30 seconds per user
@@ -768,155 +799,33 @@ async def roast_nick(ctx):
         await ctx.send("Failed to roast Nick! But he's still a virgin! 💀")
 
 def format_price_label(price):
-    """Format price incents"""
-    price_in_cents = price * 100
-    return f"{price_in_cents:.2f}¢"
-
-# Update cleanup() function to be more robust
-def cleanup():
-    """Cleanup function with enhanced process management"""
-    logger.info("Bot cleanup initiated")
+    """Format price in cents"""
     try:
-        # Clean up lock file
-        lock_file = ".bot.lock"
-        if os.path.exists(lock_file):
-            try:
-                os.remove(lock_file)
-                logger.info("Lock file removed")
-            except Exception as e:
-                logger.error(f"Error removing lock file: {e}")
-
-        # Force garbage collection
-        gc.collect()
-        logger.info("Garbage collection completed")
-
-        # Ensure bot connection is closed
-        if not bot.is_closed():
-            logger.info("Closing bot connection...")
-            asyncio.create_task(bot.close())
-
-        logger.info("Cleanup complete")
+        price_in_cents = price * 100
+        return f"{price_in_cents:.2f}¢"
     except Exception as e:
-        logger.error(f"Error during cleanup: {str(e)}")
+        logger.error(f"Error formatting price: {str(e)}")
+        return "0.00¢"  # Safe fallback
 
-# Update main() function for better startup/shutdown handling
 async def main():
-    """Main async entry point with enhanced error handling"""
+    """Main entry point with simplified error handling"""
     try:
-        # Initialize supervisor
-        supervisor = BotSupervisor()
-
-        # Set up signal handlers for graceful shutdown
-        def handle_signal(sig, frame):
-            logger.info(f"Received signal {sig}")
-            supervisor.stop()
-            sys.exit(0)
-
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
-
-        # Start the bot with proper error handling
         async with bot:
-            logger.info("Starting bot supervisor monitoring...")
-            monitor_task = bot.loop.create_task(supervisor.monitor(bot))
-
-            logger.info("Starting bot with Discord token...")
-            try:
-                await bot.start(TOKEN)
-            except Exception as e:
-                logger.error(f"Failed to start bot: {str(e)}")
-                sys.exit(1)
-
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
-        logger.exception("Full traceback:")
-        sys.exit(1)
-
-# Signal handlers for graceful shutdown
-def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    logger.info(f"Received signal {signum}")
-    cleanup()
-    sys.exit(0)
-
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
-
-
-async def run_bot():
-    try:
-        await bot.start(TOKEN)
+            await bot.start(TOKEN)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
         logger.exception("Full traceback:")
     finally:
-        await shutdown(bot)
-
-async def shutdown(bot):
-    """Async shutdown handler"""
-    try:
         if not bot.is_closed():
             await bot.close()
             logger.info("Bot connection closed")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {str(e)}")
-
-async def main():
-    """Main async entry point with enhanced error handling"""
-    try:
-        # Initialize supervisor
-        supervisor = BotSupervisor()
-
-        # Set up signal handlers for graceful shutdown
-        def handle_signal(sig, frame):
-            logger.info(f"Received signal {sig}")
-            supervisor.stop()
-            sys.exit(0)
-
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
-
-        # Start the bot with proper error handling
-        await run_bot()
-
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
-        logger.exception("Full traceback:")
-        sys.exit(1)
 
 if __name__ == "__main__":
     try:
-        # Check for existing lock file
-        lock_file = ".bot.lock"
-        if os.path.exists(lock_file):
-            try:
-                with open(lock_file, 'r') as f:
-                    pid = int(f.read().strip())
-                    if psutil.pid_exists(pid):
-                        logger.error(f"Another instance is running with PID {pid}")
-                        sys.exit(1)
-            except Exception:
-                pass
-
-        # Create new lock file
-        with open(lock_file, 'w') as f:
-            f.write(str(os.getpid()))
-
-        # Run the bot
         asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-        cleanup()
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
         logger.exception("Full traceback:")
-        cleanup()
-    finally:
-        # Cleanup lock file
-        try:
-            if os.path.exists(lock_file):
-                os.remove(lock_file)
-        except Exception as e:
-            logger.error(f"Error removing lock file: {e}")
+        sys.exit(1)
