@@ -168,21 +168,31 @@ async def on_command(ctx):
 
 @bot.event
 async def on_command_error(ctx, error):
-    """Handle command errors gracefully"""
-    logger.error(f"Command error occurred: {str(error)}")
+    """Enhanced command error handling with detailed logging"""
+    logger.error(f"Command error in {ctx.command} by {ctx.author} in {ctx.guild}: {str(error)}")
+
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(f"⏳ Command on cooldown. Try again in {error.retry_after:.1f}s")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don't have permission to use this command!")
     elif isinstance(error, commands.CommandNotFound):
         await ctx.send("❌ Command not found. Use !help to see available commands.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Missing required argument: {error.param.name}")
     else:
-        logger.error(f'Error in command "{ctx.command}": {str(error)}')
-        await ctx.send("❌ Command failed! Try !help to see available commands.")
+        logger.error(f'Unhandled command error: {str(error)}')
+        logger.exception(error)
+        await ctx.send("❌ An error occurred while processing your command. Please try again later.")
 
 @bot.event
 async def on_error(event, *args, **kwargs):
-    """Handle any uncaught exceptions"""
+    """Handle any uncaught exceptions with detailed logging"""
+    error = sys.exc_info()
     logger.error(f'Error in {event}:')
-    logger.exception('Traceback:')
+    logger.error(f'Error type: {error[0].__name__}')
+    logger.error(f'Error value: {str(error[1])}')
+    logger.error('Full traceback:')
+    logger.exception(error[1])
 
 @bot.command(name='ping')
 @commands.cooldown(1, 2, commands.BucketType.user)  # Rate limit: 1 use per 2 seconds per user
@@ -763,9 +773,7 @@ async def help_command(ctx):
   - Use $LUX or paste a Solana contract address
   - Timeframes: 1hr, 24hr, 7d, 1m, 3m
 • `!crash` - See how much LUX crashed
-• `!takeover` - Show LUX chart with NWA takeover line
-
-🏦 **NWA Wallet Commands** 🏦
+• `!takeover` - Show LUX chart with NWA takeover line🏦 **NWA Wallet Commands** 🏦
 • `!linkwallet <address>` - Link your NWA wallet
 • `!verifywallet <code>` - Verify wallet ownership
 • `!wallet` - Show your NWA wallet info
@@ -816,17 +824,25 @@ def format_price_label(price):
         return "0.00¢"  # Safe fallback
 
 async def main():
-    """Main entry point with improved error handling for Railway deployment"""
+    """Enhanced main entry point with improved error handling"""
     try:
         logger.info("Starting bot on Railway deployment...")
+        logger.info(f"Connected to database: {bool(os.getenv('DATABASE_URL'))}")
+        logger.info(f"OpenAI API key configured: {bool(os.getenv('OPENAI_API_KEY'))}")
+
         async with bot:
             await bot.start(TOKEN)
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
     except Exception as e:
-        logger.critical(f"Critical error in main loop: {str(e)}")
+        logger.critical(f"Critical error in main: {str(e)}")
         logger.exception("Full traceback:")
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot shutdown requested")
+    except Exception as e:
+        logger.critical(f"Fatal error: {str(e)}")
+        logger.exception("Full traceback:")
+        sys.exit(1)

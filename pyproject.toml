@@ -5,9 +5,7 @@ description = "A simple Discord bot for roasting Lux coin"
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.11.12",
-    "anthropic>=0.45.2",
     "discord-py>=2.4.0",
-    "emoji>=2.14.1",
     "openai>=1.61.1",
     "pillow>=11.1.0",
     "python-dotenv>=1.0.1",
@@ -18,12 +16,26 @@ dependencies = [
     "backoff>=2.2.1",
 ]
 
-[tool.railway]
-build.builder = "nixpacks"
-deploy.startCommand = "python bot.py"
-deploy.restartPolicyType = "ON_FAILURE"
-deploy.restartPolicyMaxRetries = 10
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.railway]
+build.builder = "nixpacks"
+build.engineVersion = "1.0.0"
+
+[tool.railway.deploy]
+startCommand = "python3 bot.py"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[tool.railway.nixpacks]
+enable = true
+
+[tool.railway.nixpacks.features]
+python = true
