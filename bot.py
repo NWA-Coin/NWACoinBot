@@ -780,7 +780,7 @@ def cleanup():
             asyncio.create_task(bot.close())
         logger.info("Cleanup complete")
     except Exception as e:
-            logger.error(f"Error during cleanup: {str(e)}")
+        logger.error(f"Error during cleanup: {str(e)}")
 
 async def shutdown(bot):
     """Async shutdown handler"""
