@@ -1,16 +1,3 @@
-├── bot.py                 # Main Discord bot file
-├── create_templates.py    # Meme template generation
-├── token_balance.py      # Token balance checking
-├── token_checker.js      # Solana token utilities
-├── supervisor.py         # Bot supervision and monitoring
-├── utils.py             # Utility functions
-├── pyproject.toml       # Python dependencies
-├── package.json         # Node.js dependencies
-├── Procfile            # Railway deployment configuration
-├── .gitignore          # Git ignore rules
-└── README.md           # Project documentation
-```
-
 ## Quick Setup Steps
 
 ### 1. Create Repository
@@ -20,10 +7,37 @@ Go to https://github.com/new
 - Make it Public
 - Initialize with README
 
-### 2. Add Environment Variables
-Required environment variables for Railway deployment:
+### 2. Git Setup
+# Git Setup Instructions
+
+1. Configure Git credentials:
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your-email@example.com"
 ```
-DISCORD_TOKEN=your_discord_bot_token
-OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=your_postgresql_url
-COINGECKO_API_KEY=your_coingecko_api_key
+
+2. Set up the repository:
+```bash
+# Initialize Git repository
+git init
+
+# Add the remote repository
+git remote add origin https://github.com/NWA-Coin/NWACoinBot.git
+
+# Create and switch to main branch
+git checkout -b main
+```
+
+3. Add and commit files:
+```bash
+# Add all files
+git add .
+
+# Commit changes
+git commit -m "Initial commit: NWAcoinbot Discord bot"
+```
+
+4. Push to GitHub:
+```bash
+# Push to main branch
+git push -u origin main
