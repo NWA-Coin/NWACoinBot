@@ -52,16 +52,21 @@ FALLBACK_ROASTS = [
 
 # Add new fallback roasts specifically targeting Nick White
 NICK_WHITE_ROASTS = [
-    "Virgin Nick White still living in mommy's basement! Complete loser! 🤡💩",
-    "Yo Nick White, did your mom buy you those programming socks? Pathetic virgin! 🧦🤮",
-    "Nick White the type to practice leetcode while his girl's out with Chad! Oh wait... 🤡💀",
-    "Even ChatGPT writes better code than Nick White! Certified clown! 🤖🗑️",
-    "Nick White's YouTube career is more dead than his social life! 📉💩",
-    "Imagine being a 30-year-old virgin teaching basic loops! Get rekt Nick! 👶🤡",
-    "Nick White's code reviews take longer than his dating history! Complete L! 💀🖕",
-    "Hey Nick, your mom called - she wants her basement back! 🏠🤮",
-    "Nick White the type to debug his social skills and still fail! 🐛💩",
-    "Even LUNA had better documentation than Nick's dating profile! 📝🤡"
+    "Fat rat Nick White still living in mommy's basement! Complete loser! 🐀💩",
+    "Nick White so lazy he can't even code his way out of being fat! 🍔🤮",
+    "Yo fat boy Nick, did your mom buy those XXXL programming socks? 🧦🐷",
+    "Nick White's viewcount lower than his IQ! Failed streamer confirmed! 📉🗑️",
+    "Even ChatGPT writes better code than this fat rat Nick White! 🐀💩",
+    "Nick White's Twitch career more dead than his diet plans! 🍕💀",
+    "Lazy ass Nick White can't even debug his eating habits! Get rekt! 🍔🤡",
+    "Nick the rat got exposed! Back to making basic loop tutorials! 🐀👶",
+    "Imagine being a fat virgin teaching 'while loops'! Complete L! 🤡💩",
+    "Nick White so lazy he outsources his coding to ChatGPT! Exposed! 🤖🗑️",
+    "Failed streamer Nick White got less viewers than brain cells! 📺💀",
+    "This fat rat can't even optimize his own lifestyle! Complete joke! 🐀🤮",
+    "Yo Nick, McDonald's called - they miss their best customer! 🍔🐷",
+    "Nick White's streams more dead than his workout routine! 🏃‍♂️💀",
+    "Even LUNA had better engagement than Nick's dead channel! 📉🤡"
 ]
 
 async def get_crash_stats():
