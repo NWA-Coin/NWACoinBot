@@ -15,13 +15,30 @@ class BotSupervisor:
         self.last_heartbeat = datetime.now()
         self.is_running = True
         self.consecutive_failures = 0
-        self.MAX_FAILURES = 5  # Increased for more retry attempts
-        self.HEARTBEAT_INTERVAL = 15  # Reduced for quicker detection
-        self.RESTART_COOLDOWN = 60  # Reduced cooldown for faster recovery
+        self.MAX_FAILURES = 3  # Reduced for faster recovery
+        self.HEARTBEAT_INTERVAL = 30  # Increased interval
+        self.RESTART_COOLDOWN = 30  # Reduced cooldown
         self.last_restart = datetime.now()
         self.process = psutil.Process(os.getpid())
-        self.memory_threshold = 85  # Memory threshold percentage
+        self.memory_threshold = 90  # Increased threshold
         self.server_port = server_port
+
+        # Add lock file check
+        self.lock_file = ".bot.lock"
+        if os.path.exists(self.lock_file):
+            try:
+                with open(self.lock_file, 'r') as f:
+                    pid = int(f.read().strip())
+                    if psutil.pid_exists(pid):
+                        logger.error(f"Another instance is running with PID {pid}")
+                        sys.exit(1)
+            except Exception:
+                pass
+
+        # Create lock file
+        with open(self.lock_file, 'w') as f:
+            f.write(str(os.getpid()))
+
         logger.info(f"Supervisor initialized with server port: {server_port}")
 
     async def monitor(self, bot):
@@ -145,9 +162,17 @@ class BotSupervisor:
             logger.error(f"Error during resource cleanup: {str(e)}")
 
     def stop(self):
-        """Stop the supervisor."""
+        """Stop the supervisor and clean up."""
         self.is_running = False
         self.cleanup_resources()
+
+        # Remove lock file
+        try:
+            if os.path.exists(self.lock_file):
+                os.remove(self.lock_file)
+        except Exception as e:
+            logger.error(f"Error removing lock file: {e}")
+
         logger.info("Bot supervisor stopped")
 
     def setup_signal_handlers(self):

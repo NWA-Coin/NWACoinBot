@@ -5,19 +5,10 @@ from dotenv import load_dotenv
 import logging
 import sys
 import signal
-from datetime import datetime
 import asyncio
 from supervisor import BotSupervisor
-from roast_generator import generate_roast
-from meme_generator import generate_meme
-from price_chart import get_lux_price_history, format_price_label
-from market_data import get_solana_token_by_contract
-from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT
-import fcntl
-import errno
-from giveaway_manager import GiveawayManager
-import random
-import base58
+import psutil # Added import for process management
+import gc # Added import for garbage collection
 
 # Update logging config for better visibility in Railway logs
 logging.basicConfig(
@@ -35,6 +26,17 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     logger.critical("DISCORD_TOKEN not found in environment variables! Bot cannot start.")
     sys.exit(1)
+
+# Rest of the imports
+from roast_generator import generate_roast
+from meme_generator import generate_meme
+from price_chart import get_lux_price_history, format_price_label
+from market_data import get_solana_token_by_contract
+from wallet_manager import WalletManager, MIN_HOLDING_AMOUNT
+from giveaway_manager import GiveawayManager
+import base58
+import random
+from datetime import datetime
 
 logger.info("Starting LUX Roast Bot - Railway Deployment")
 logger.info("Python version: %s", sys.version)
@@ -770,38 +772,34 @@ def format_price_label(price):
     price_in_cents = price * 100
     return f"{price_in_cents:.2f}¢"
 
-# Enhanced shutdown handling
+# Update cleanup() function to be more robust
 def cleanup():
-    """Cleanup function"""
+    """Cleanup function with enhanced process management"""
     logger.info("Bot cleanup initiated")
     try:
+        # Clean up lock file
+        lock_file = ".bot.lock"
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+                logger.info("Lock file removed")
+            except Exception as e:
+                logger.error(f"Error removing lock file: {e}")
+
+        # Force garbage collection
+        gc.collect()
+        logger.info("Garbage collection completed")
+
+        # Ensure bot connection is closed
         if not bot.is_closed():
             logger.info("Closing bot connection...")
             asyncio.create_task(bot.close())
+
         logger.info("Cleanup complete")
     except Exception as e:
         logger.error(f"Error during cleanup: {str(e)}")
 
-async def shutdown(bot):
-    """Async shutdown handler"""
-    try:
-        if not bot.is_closed():
-            await bot.close()
-            logger.info("Bot connection closed")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {str(e)}")
-
-# Signal handlers for graceful shutdown
-def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    logger.info(f"Received signal {signum}")
-    cleanup()
-    sys.exit(0)
-
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
-
-
+# Update main() function for better startup/shutdown handling
 async def main():
     """Main async entry point with enhanced error handling"""
     try:
@@ -834,27 +832,91 @@ async def main():
         logger.exception("Full traceback:")
         sys.exit(1)
 
-def ensure_single_instance():
-    """Ensure only one instance of the bot runs at a time"""
-    try:
-        # Try to acquire a file lock
-        lock_file = open(".bot.lock", "w")
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lock_file
-    except IOError as e:
-        if e.errno == errno.EACCES or e.errno == errno.EAGAIN:
-            logger.error("Another instance of the bot is already running")
-            sys.exit(1)
-        raise
+# Signal handlers for graceful shutdown
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    logger.info(f"Received signal {signum}")
+    cleanup()
+    sys.exit(0)
 
-if __name__ == "__main__":
-    # Ensure single instance before starting
-    lock_file = ensure_single_instance()
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+
+async def run_bot():
     try:
-        asyncio.run(main())
+        await bot.start(TOKEN)
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.info("Bot stopped by user")
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}")
         logger.exception("Full traceback:")
+    finally:
+        await shutdown(bot)
+
+async def shutdown(bot):
+    """Async shutdown handler"""
+    try:
+        if not bot.is_closed():
+            await bot.close()
+            logger.info("Bot connection closed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {str(e)}")
+
+async def main():
+    """Main async entry point with enhanced error handling"""
+    try:
+        # Initialize supervisor
+        supervisor = BotSupervisor()
+
+        # Set up signal handlers for graceful shutdown
+        def handle_signal(sig, frame):
+            logger.info(f"Received signal {sig}")
+            supervisor.stop()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, handle_signal)
+        signal.signal(signal.SIGINT, handle_signal)
+
+        # Start the bot with proper error handling
+        await run_bot()
+
+    except Exception as e:
+        logger.error(f"Error in main: {str(e)}")
+        logger.exception("Full traceback:")
         sys.exit(1)
+
+if __name__ == "__main__":
+    try:
+        # Check for existing lock file
+        lock_file = ".bot.lock"
+        if os.path.exists(lock_file):
+            try:
+                with open(lock_file, 'r') as f:
+                    pid = int(f.read().strip())
+                    if psutil.pid_exists(pid):
+                        logger.error(f"Another instance is running with PID {pid}")
+                        sys.exit(1)
+            except Exception:
+                pass
+
+        # Create new lock file
+        with open(lock_file, 'w') as f:
+            f.write(str(os.getpid()))
+
+        # Run the bot
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+        cleanup()
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+        logger.exception("Full traceback:")
+        cleanup()
+    finally:
+        # Cleanup lock file
+        try:
+            if os.path.exists(lock_file):
+                os.remove(lock_file)
+        except Exception as e:
+            logger.error(f"Error removing lock file: {e}")
